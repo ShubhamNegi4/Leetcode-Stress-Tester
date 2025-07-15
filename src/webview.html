@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: sans-serif; padding: 1em; }
+    input { width: 200px; margin-right: .5em; }
+    button { margin: .5em 0; }
+  </style>
+</head>
+<body>
+  <h2>LeetCode Stress Tester</h2>
+  <div>
+    <input id="problemId" placeholder="e.g. two-sum" />
+    <button id="start">Fetch & Stress Test</button>
+  </div>
+  <div id="status">Idle</div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    document.getElementById('start').addEventListener('click', () => {
+      const id = document.getElementById('problemId').value.trim();
+      if (id) vscode.postMessage({ command: 'fetchTests', id });
+    });
+
+    window.addEventListener('message', event => {
+      const msg = event.data;
+      const st = document.getElementById('status');
+      switch (msg.command) {
+        case 'progress':
+          st.textContent = `Running ${msg.i}/${msg.total}`;
+          break;
+        case 'fail':
+          st.innerHTML = `<strong>Failed on input:</strong><pre>${msg.input}</pre>`;
+          break;
+        case 'done':
+          st.textContent = '✅ All tests passed!';
+          break;
+        case 'error':
+          st.textContent = `Error: ${msg.error}`;
+          break;
+      }
+    });
+  </script>
+</body>
+</html>

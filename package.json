@@ -1,34 +1,54 @@
 {
   "name": "competitive-companion-v2",
-  "displayName": "competitive-companion-v2",
-  "description": "In‑editor CP judge results panel",
-  "version": "0.0.1",
+  "displayName": "Competitive Companion: Stress Tester",
+  "description": "In‑editor CP judge results panel with LeetCode stress-testing",
+  "version": "0.1.0",
   "engines": {
-    "vscode": "^1.102.0"
+    "vscode": "^1.64.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onCommand:competitive-companion-v2.showStressTester"],
-  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:competitive-companion-v2.showStressTester"
+  ],
+  "main": "src/extension.js",
   "contributes": {
-    "commands": [{
-      "command": "competitive-companion-v2.showStressTester",
-      "title": "Competitive Companion: Open Stress Tester"
-    }]
+    "commands": [
+      {
+        "command": "competitive-companion-v2.showStressTester",
+        "title": "Competitive Companion: Open Stress Tester"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Competitive Companion Settings",
+      "properties": {
+        "competitiveCompanion.testCount": {
+          "type": "number",
+          "default": 100,
+          "description": "Number of random tests to generate"
+        },
+        "competitiveCompanion.timeLimitMs": {
+          "type": "number",
+          "default": 1000,
+          "description": "Per-test time limit in milliseconds"
+        }
+      }
+    }
   },
-  
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.102.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
-    "eslint": "^9.25.1",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "@types/node": "^16.11.7",
+    "@types/vscode": "^1.64.0",
+    "@vscode/test-electron": "^2.0.0",
+    "eslint": "^8.0.0"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
   }
 }
