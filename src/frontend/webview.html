@@ -1,13 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <style>
-    body { font-family: sans-serif; padding: 1em; }
-    input { width: 200px; margin-right: .5em; }
-    button { margin: .5em 0; }
+    body {
+      font-family: sans-serif;
+      padding: 1em;
+    }
+
+    input {
+      width: 200px;
+      margin-right: .5em;
+    }
+
+    button {
+      margin: .5em 0;
+    }
   </style>
 </head>
+
 <body>
   <h2>LeetCode Stress Tester</h2>
   <div>
@@ -19,7 +31,7 @@
     const vscode = acquireVsCodeApi();
     document.getElementById('start').addEventListener('click', () => {
       const id = document.getElementById('problemId').value.trim();
-      if (id) vscode.postMessage({ command: 'fetchTests', id });
+      if (id) vscode.postMessage({ command: 'fetchProblemInfo', id });
     });
 
     window.addEventListener('message', event => {
@@ -42,4 +54,5 @@
     });
   </script>
 </body>
+
 </html>

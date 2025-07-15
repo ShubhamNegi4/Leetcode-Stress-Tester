@@ -1,14 +1,14 @@
 const vscode = require('vscode');
+const { openWebview } = require('./webview');
 
 function activate(context) {
-  console.log('🚀 [ext] activating…');
+  console.log("Activating extension");
   const disposable = vscode.commands.registerCommand(
     'competitive-companion-v2.showStressTester',
     async () => {
       console.log('command handler invoked');
       try {
         // lazy‑load your webview so any errors land here instead of at module‐load time
-        const { openWebview } = require('./webview');
         await openWebview(context);
       } catch (err) {
         console.error('openWebview failed:', err);

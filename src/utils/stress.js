@@ -4,12 +4,17 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const vscode = require('vscode');
-const { fetchLeetCodeTests } = require('./fetchTests');
-const { mkTempDir, copyTemplates } = require('./utils');
+const fetchProblemInfo = require('./fetch');
+const { mkTempDir, copyTemplates } = require('./makeDirs');
 
 async function handleFetchAndStress(problemId, panel) {
   try {
-    const tests = await fetchLeetCodeTests(problemId);
+    console.log("hi");
+    const tests = await fetchProblemInfo(problemId);
+    console.log("reponse from leetcode: ",tests);
+    return ; 
+
+
     const tmp = mkTempDir('lc-stress-');
     fs.writeFileSync(path.join(tmp, 'input.txt'), tests.join(os.EOL));
 
@@ -35,7 +40,7 @@ async function handleFetchAndStress(problemId, panel) {
       }
     }
 
-    panel.webview.postMessage({ command: 'done' });
+    // panel.webview.postMessage({ command: 'done' });
   } catch (err) {
     panel.webview.postMessage({ command: 'error', error: err.message });
   }

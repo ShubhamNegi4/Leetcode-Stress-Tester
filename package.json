@@ -12,7 +12,7 @@
   "activationEvents": [
     "onCommand:competitive-companion-v2.showStressTester"
   ],
-  "main": "src/extension.js",
+  "main": "src/frontend/extension.js",
   "contributes": {
     "commands": [
       {
