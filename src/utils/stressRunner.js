@@ -1,13 +1,15 @@
-const fs          = require('fs');
-const path        = require('path');
+// utils/stressRunner.js
+
+const fs       = require('fs');
+const path     = require('path');
 const { execSync } = require('child_process');
-const vscode      = require('vscode');
+const vscode   = require('vscode');
 
 const { fetchProblemInfo }       = require('./fetch.js');
 const { mkTempDir, copyTemplates } = require('./makeDirs.js');
 const { extractSamples }         = require('./parseProblem.js');
 
-// helper: parse all integers from a string
+/** extract ints for sample‑testing */
 function parseNumbers(str) {
   const m = str.match(/-?\d+/g);
   return m ? m.map(Number) : [];
@@ -17,82 +19,153 @@ async function handleFetchAndStress(slug, panel, mode) {
   const q = await fetchProblemInfo(slug);
   if (!q) throw new Error('Problem not found');
 
+  // make temp dir and copy your gen.cpp, brute.cpp, solution.cpp, stress.sh (if any)
   const work = mkTempDir();
   copyTemplates(work);
-  if (mode === 'runStress') {
-    fs.writeFileSync(path.join(work, 'statement.html'), q.content, 'utf8');
-  }
 
+  // compile C++
   ['gen.cpp','brute.cpp','solution.cpp'].forEach(src => {
     const exe = path.basename(src, '.cpp');
     execSync(`g++ -std=c++17 -O2 ${src} -o ${exe}`, { cwd: work });
   });
 
+  // SAMPLE MODE (unchanged)
   if (mode === 'runSamples') {
     const samples = extractSamples(q.content);
     if (!samples.length) throw new Error('No samples found');
 
-    const aggPath = path.join(__dirname, 'input.txt');
-    fs.writeFileSync(aggPath,
-      `Sample Testcases for ${slug}\n===========================\n`,
-      'utf8'
-    );
-
     for (let i = 0; i < samples.length; i++) {
-      const idx = i+1;
+      panel.webview.postMessage({ command:'progress', i:i+1, total: samples.length });
       const { input, output: expected } = samples[i];
-      const expNums = parseNumbers(expected);
-
-      fs.appendFileSync(aggPath,
-        `Sample ${idx}:\nInput:\n${input}Expected Output:\n${expected}\n\n`,
-        'utf8'
-      );
-
-      panel.webview.postMessage({ command:'progress', i:idx, total: samples.length });
       fs.writeFileSync(path.join(work,'input.txt'), input);
-      const solutionOutRaw = execSync(`./solution < input.txt`, { cwd: work }).toString().trim();
-      const solNums = parseNumbers(solutionOutRaw);
 
-      const ok = solNums.length === expNums.length && solNums.every((v,j)=>v===expNums[j]);
+      const solRaw = execSync(`./solution < input.txt`, { cwd: work }).toString().trim();
+      const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
+
       if (!ok) {
         return panel.webview.postMessage({
           command:   'fail',
-          caseIndex: idx,
+          caseIndex: i+1,
           input,
           expected,
-          solution:  solutionOutRaw
+          solution:  solRaw
         });
       }
 
       panel.webview.postMessage({
         command:   'sample',
-        caseIndex: idx,
+        caseIndex: i+1,
         input,
         expected,
-        solution:  solutionOutRaw
+        solution:  solRaw
       });
     }
+
     return panel.webview.postMessage({ command:'done' });
   }
 
-  const total = vscode.workspace.getConfiguration().get('competitiveCompanion.testCount',50);
-  for (let i=1;i<=total;i++){
-    panel.webview.postMessage({ command:'progress', i, total });
-    execSync(`./gen > input.txt`,{ cwd: work });
-    const input = fs.readFileSync(path.join(work,'input.txt'),'utf8');
-    const bruteOut = execSync(`./brute < input.txt`,{ cwd: work }).toString().trim();
-    const solutionOut= execSync(`./solution < input.txt`,{ cwd: work }).toString().trim();
-    if (bruteOut!==solutionOut) {
+  // STRESS MODE
+// inside handleFetchAndStress, replace the runStress block with:
+
+if (mode === 'runStress') {
+  const cfg      = vscode.workspace.getConfiguration();
+  const maxTests = cfg.get('competitiveCompanion.testCount', 50);
+  const toMs     = (cfg.get('competitiveCompanion.testTimeout', 2) * 1000);
+
+  // point at your extension’s own folder:
+  const outDir = path.resolve(__dirname, '..', '..', 'stress tester');
+
+  // prepare cumulative buffers
+  let allInput    = '';
+  let allSolOut   = '';
+  let allBruteOut = '';
+
+  for (let i = 1; i <= maxTests; i++) {
+    panel.webview.postMessage({ command:'progress', i, total: maxTests });
+
+    // 1) generate
+    execSync(`./gen > input.txt`, { cwd: work });
+    const inp = fs.readFileSync(path.join(work, 'input.txt'), 'utf8');
+
+    // 2) run solution
+    let solOut;
+    try {
+      solOut = execSync(`./solution < input.txt`, { cwd: work, timeout: toMs })
+                .toString().trim();
+    } catch (err) {
+      solOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
+    }
+
+    // 3) run brute
+    let bruOut;
+    try {
+      bruOut = execSync(`./brute < input.txt`, { cwd: work, timeout: toMs })
+                .toString().trim();
+    } catch (err) {
+      bruOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
+    }
+
+    // 4) append to cumulative buffers (with separators)
+    allInput    += `=== Test #${i} ===\n${inp}\n\n`;
+    allSolOut   += `=== Test #${i} ===\n${solOut}\n\n`;
+    allBruteOut += `=== Test #${i} ===\n${bruOut}\n\n`;
+
+    // 5) if mismatch, write out the three files and report failure immediately
+    if (solOut !== bruOut) {
+      // write cumulative files
+      fs.writeFileSync(path.join(outDir, 'all_input.txt'),    allInput);
+      fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
+      fs.writeFileSync(path.join(outDir, 'all_brute.txt'),    allBruteOut);
+
+      // report just this one failure
       return panel.webview.postMessage({
         command:   'fail',
         caseIndex: i,
-        input,
-        brute:     bruteOut,
-        solution:  solutionOut
+        input:     inp,
+        expected:  bruOut,
+        solution:  solOut
       });
     }
+
+    // otherwise passed test i
+    panel.webview.postMessage({ command:'pass', caseIndex: i });
   }
-  panel.webview.postMessage({ command:'done' });
+
+  // if we finish all tests with no mismatches, write out the files one last time:
+  fs.writeFileSync(path.join(outDir, 'all_input.txt'),    allInput);
+  fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
+  fs.writeFileSync(path.join(outDir, 'all_brute.txt'),    allBruteOut);
+
+  return panel.webview.postMessage({ command:'done' });
 }
 
-module.exports = { handleFetchAndStress };  
+
+  throw new Error(`Unknown mode: ${mode}`);
+}
+
+/**
+ * common failure handler: writes out input/sol/brute, then posts 'fail'
+ */
+function report(idx, label, err, work, outDir, panel, solOut = '', bruOut = '') {
+  const inp     = fs.readFileSync(path.join(work,'input.txt'),'utf8');
+  const expected= bruOut || '';
+  const solution= solOut || '';
+
+  // also dump into outDir if available
+  if (outDir) {
+    fs.writeFileSync(path.join(outDir, `input_${idx}.txt`),          inp);
+    fs.writeFileSync(path.join(outDir, `solution_${idx}.txt`),     solution);
+    fs.writeFileSync(path.join(outDir, `brute_${idx}.txt`),        expected);
+  }
+
+  panel.webview.postMessage({
+    command:   'fail',
+    caseIndex: idx,
+    input:     inp,
+    expected,
+    solution,
+    error:     label + (err ? `: ${err.message}` : '')
+  });
+}
+
+module.exports = { handleFetchAndStress };

@@ -10,11 +10,11 @@ int main() {
     mt19937 rng(chrono::steady_clock::now().time_since_epoch().count());
 
     // 2 ≤ n ≤ 10000  (you can bump this up if you like)
-    uniform_int_distribution<int> Dn(2, 10000);
+    uniform_int_distribution<int> Dn(2, 10);
     int n = Dn(rng);
 
     // −1e9 ≤ A[i] ≤ 1e9
-    uniform_int_distribution<long long> Da(-1000000000LL, 1000000000LL);
+    uniform_int_distribution<long long> Da(1, 100);
 
     // print as: [a0,a1,...,a(n-1)]
     cout << '[';
@@ -26,7 +26,7 @@ int main() {
     cout << ']' << '\n';
 
     // −1e9 ≤ k ≤ 1e9
-    uniform_int_distribution<long long> Dk(-1000000000LL, 1000000000LL);
+    uniform_int_distribution<long long> Dk(1, 100);
     long long k = Dk(rng);
     cout << k << "\n";
 

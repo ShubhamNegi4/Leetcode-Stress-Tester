@@ -7,3 +7,17 @@ Input:
 Expected Output:
 [0,1]
 
+Sample 2:
+Input:
+[3,2,4]
+6
+Expected Output:
+[1,2]
+
+Sample 3:
+Input:
+[3,3]
+6
+Expected Output:
+[0,1]
+

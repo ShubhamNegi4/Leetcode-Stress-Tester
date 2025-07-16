@@ -10,7 +10,7 @@ vector<int> twoSum(const vector<long long>& nums, long long target) {
     //     if (it != mp.end()) {
     //         return { it->second, i };
     //     }
-    //     mp[nums[i]] = i;
+    //     mp[nums[i]] = 0;
     // }
     return {-1, -1};
 }
