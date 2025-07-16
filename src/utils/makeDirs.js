@@ -9,7 +9,7 @@ function mkTempDir(prefix = 'lc-stress-') {
 }
 
 /**
- * Copy your local templates (brute.cpp, solution.cpp, gen.cpp, stress.sh, etc.)
+ * Copy your local templates (official.cpp, solution.cpp, gen.cpp, stress.sh, etc.)
  * into the working directory.
  */
 function copyTemplates(dest) {
@@ -17,7 +17,7 @@ function copyTemplates(dest) {
   console.log('Template dir is:', tplDir);
 
   // copy every file your stress.sh will need
-  ['brute.cpp', 'solution.cpp', 'gen.cpp', 'stress.sh']
+  ['official.cpp', 'solution.cpp', 'gen.cpp', 'stress.sh']
     .forEach(f => {
       const src = path.join(tplDir, f);
       const dst = path.join(dest, f);

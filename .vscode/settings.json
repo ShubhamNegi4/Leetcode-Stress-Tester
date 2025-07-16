@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.hbs": "handlebars",
+        "vector": "cpp"
+    }
+}

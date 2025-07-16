@@ -5,7 +5,7 @@ const path     = require('path');
 const { execSync } = require('child_process');
 const vscode   = require('vscode');
 
-const { fetchProblemInfo }       = require('./fetch.js');
+const { fetchProblemInfo, fetchOfficialSolution, fetchGithubSolution }       = require('./fetch.js');
 const { mkTempDir, copyTemplates } = require('./makeDirs.js');
 const { extractSamples }         = require('./parseProblem.js');
 
@@ -19,12 +19,30 @@ async function handleFetchAndStress(slug, panel, mode) {
   const q = await fetchProblemInfo(slug);
   if (!q) throw new Error('Problem not found');
 
-  // make temp dir and copy your gen.cpp, brute.cpp, solution.cpp, stress.sh (if any)
+  let isAvailable = await fetchOfficialSolution(slug);
+  console.log("LeetCode result:", isAvailable);
+
+
+  if (isAvailable) {
+    console.log("Fetched from LeetCode");
+  } else {
+    console.log("Not available on LeetCode, searching on GitHub...");
+
+    isAvailable = await fetchGithubSolution(slug);
+
+    if (isAvailable) {
+      console.log("Fetched from GitHub");
+    } else {
+      console.log("Sorry, no solution available.");
+    }
+  }
+
+  // make temp dir and copy your gen.cpp, official.cpp, solution.cpp, stress.sh (if any)
   const work = mkTempDir();
   copyTemplates(work);
 
   // compile C++
-  ['gen.cpp','brute.cpp','solution.cpp'].forEach(src => {
+  ['gen.cpp','official.cpp','solution.cpp'].forEach(src => {
     const exe = path.basename(src, '.cpp');
     execSync(`g++ -std=c++17 -O2 ${src} -o ${exe}`, { cwd: work });
   });
@@ -78,7 +96,7 @@ if (mode === 'runStress') {
   // prepare cumulative buffers
   let allInput    = '';
   let allSolOut   = '';
-  let allBruteOut = '';
+  let allofficialOut = '';
 
   for (let i = 1; i <= maxTests; i++) {
     panel.webview.postMessage({ command:'progress', i, total: maxTests });
@@ -96,10 +114,10 @@ if (mode === 'runStress') {
       solOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
     }
 
-    // 3) run brute
+    // 3) run official
     let bruOut;
     try {
-      bruOut = execSync(`./brute < input.txt`, { cwd: work, timeout: toMs })
+      bruOut = execSync(`./official < input.txt`, { cwd: work, timeout: toMs })
                 .toString().trim();
     } catch (err) {
       bruOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
@@ -108,14 +126,14 @@ if (mode === 'runStress') {
     // 4) append to cumulative buffers (with separators)
     allInput    += `=== Test #${i} ===\n${inp}\n\n`;
     allSolOut   += `=== Test #${i} ===\n${solOut}\n\n`;
-    allBruteOut += `=== Test #${i} ===\n${bruOut}\n\n`;
+    allofficialOut += `=== Test #${i} ===\n${bruOut}\n\n`;
 
     // 5) if mismatch, write out the three files and report failure immediately
     if (solOut !== bruOut) {
       // write cumulative files
       fs.writeFileSync(path.join(outDir, 'all_input.txt'),    allInput);
       fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
-      fs.writeFileSync(path.join(outDir, 'all_brute.txt'),    allBruteOut);
+      fs.writeFileSync(path.join(outDir, 'all_official.txt'),    allofficialOut);
 
       // report just this one failure
       return panel.webview.postMessage({
@@ -134,7 +152,7 @@ if (mode === 'runStress') {
   // if we finish all tests with no mismatches, write out the files one last time:
   fs.writeFileSync(path.join(outDir, 'all_input.txt'),    allInput);
   fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
-  fs.writeFileSync(path.join(outDir, 'all_brute.txt'),    allBruteOut);
+  fs.writeFileSync(path.join(outDir, 'all_official.txt'),    allofficialOut);
 
   return panel.webview.postMessage({ command:'done' });
 }
@@ -144,7 +162,7 @@ if (mode === 'runStress') {
 }
 
 /**
- * common failure handler: writes out input/sol/brute, then posts 'fail'
+ * common failure handler: writes out input/sol/official, then posts 'fail'
  */
 function report(idx, label, err, work, outDir, panel, solOut = '', bruOut = '') {
   const inp     = fs.readFileSync(path.join(work,'input.txt'),'utf8');
@@ -155,7 +173,7 @@ function report(idx, label, err, work, outDir, panel, solOut = '', bruOut = '') 
   if (outDir) {
     fs.writeFileSync(path.join(outDir, `input_${idx}.txt`),          inp);
     fs.writeFileSync(path.join(outDir, `solution_${idx}.txt`),     solution);
-    fs.writeFileSync(path.join(outDir, `brute_${idx}.txt`),        expected);
+    fs.writeFileSync(path.join(outDir, `official_${idx}.txt`),        expected);
   }
 
   panel.webview.postMessage({
@@ -168,4 +186,4 @@ function report(idx, label, err, work, outDir, panel, solOut = '', bruOut = '') 
   });
 }
 
-module.exports = { handleFetchAndStress };
+module.exports = { handleFetchAndStress }
