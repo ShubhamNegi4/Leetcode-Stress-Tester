@@ -1,17 +1,21 @@
-// utils.js
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const vscode = require('vscode');
 
-function mkTempDir(prefix) {
+function mkTempDir(prefix = 'lc-stress-') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * Copy your local templates (brute.cpp + solution.cpp)
+ * into the working directory.
+ *
+ * Assume you have a folder in your extension root called
+ * “templates” that contains brute.cpp and solution.cpp.
+ */
 function copyTemplates(dest) {
-  const ext = vscode.extensions.getExtension('competitive-companion-v2');
-  const tplDir = path.join(ext.extensionPath, 'stress tester');
-  ['gen.cpp', 'brute.cpp', 'solution.cpp'].forEach(f => {
+  const tplDir = path.resolve(__dirname, '..', '..', 'stress tester');
+  ['brute.cpp', 'solution.cpp'].forEach(f => {
     fs.copyFileSync(path.join(tplDir, f), path.join(dest, f));
   });
 }

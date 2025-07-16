@@ -1,44 +1,29 @@
-const fetchProblemInfo = async (questionName) => {
-    const body = {
-        query: `
-        query($titleSlug: String!) {
-            question(titleSlug: $titleSlug) {
-                questionFrontendId
-                titleSlug
-                content
-                codeSnippets {
-                    lang
-                    langSlug
-                    code
-                }
-            }
-        }`,
-        variables: {
-            titleSlug: questionName
+const fetch = require('node-fetch');
+
+async function fetchProblemInfo(slug) {
+  const body = {
+    query: `
+      query getProblem($titleSlug: String!) {
+        question(titleSlug: $titleSlug) {
+          content
+          sampleTestCase
         }
-    };
+      }`,
+    variables: { titleSlug: slug }
+  };
 
-    try {
-        const res = await fetch('https://leetcode.com/graphql', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body)
-        });
+  const res = await fetch('https://leetcode.com/graphql', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`LeetCode API returned ${res.status}`);
+  const json = await res.json();
+  if (!json.data || !json.data.question)
+    throw new Error('Problem not found or API changed');
+  return json.data.question;
+}
 
-        if (!res.ok) {
-            console.error("status: ", res.status);
-            return null;
-        }
-
-        const json = await res.json();
-        return json.data.question;
-
-    } catch (err) {
-        console.log("Error fetching the problem:", err.message);
-        return null;
-    }
-};
-
-module.exports = fetchProblemInfo;
+module.exports = { fetchProblemInfo };

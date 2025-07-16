@@ -1,7 +1,7 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
-const { handleFetchAndStress } = require('../utils/stress');
+const { handleFetchAndStress } = require('../utils/stressRunner.js');
 
 function openWebview(context) {
   const panel = vscode.window.createWebviewPanel(
@@ -11,14 +11,15 @@ function openWebview(context) {
     { enableScripts: true }
   );
 
-  // Load the HTML from disk so we never worry about escaping backticks.
-  const htmlPath = path.join(context.extensionPath, 'src/frontend', 'webview.html');
+  // load UI
+  const htmlPath = path.join(context.extensionPath, 'src', 'frontend', 'webview.html');
   panel.webview.html = fs.readFileSync(htmlPath, 'utf8');
 
   panel.webview.onDidReceiveMessage(msg => {
-    if (msg.command === 'fetchProblemInfo') {
-      handleFetchAndStress(msg.id, panel);
-    }
+    handleFetchAndStress(msg.id, panel, msg.command)
+      .catch(err => {
+        panel.webview.postMessage({ command: 'error', error: err.message });
+      });
   });
 }
 

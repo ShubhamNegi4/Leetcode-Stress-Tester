@@ -1,25 +1,17 @@
 {
   "name": "competitive-companion-v2",
   "displayName": "Competitive Companion: Stress Tester",
-  "description": "In‑editor CP judge results panel with LeetCode stress-testing",
+  "description": "In‑editor CP judge results panel with LeetCode stress‑testing",
   "version": "0.1.0",
-  "engines": {
-    "vscode": "^1.64.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-    "onCommand:competitive-companion-v2.showStressTester"
-  ],
-  "main": "src/frontend/extension.js",
+  "engines": { "vscode": "^1.64.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:competitive-companion-v2.showStressTester"],
+  "main": "./src/frontend/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "competitive-companion-v2.showStressTester",
-        "title": "Competitive Companion: Open Stress Tester"
-      }
-    ],
+    "commands": [{
+      "command": "competitive-companion-v2.showStressTester",
+      "title":   "Competitive Companion: Stress Tester"
+    }],
     "configuration": {
       "type": "object",
       "title": "Competitive Companion Settings",
@@ -38,17 +30,17 @@
     }
   },
   "scripts": {
-    "lint": "eslint .",
-    "pretest": "npm run lint",
-    "test": "vscode-test"
+    "build": "echo 'No build step; using raw JS'",
+    "test": "echo 'No tests defined'"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "cheerio": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",
     "@types/vscode": "^1.64.0",
     "@vscode/test-electron": "^2.0.0",
     "eslint": "^8.0.0"
-  },
-  "dependencies": {
-    "node-fetch": "^2.7.0"
   }
 }

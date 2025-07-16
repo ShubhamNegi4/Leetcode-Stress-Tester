@@ -9,20 +9,26 @@ int main() {
     // seed RNG with high‐resolution clock
     mt19937 rng(chrono::steady_clock::now().time_since_epoch().count());
 
-    // 1 ≤ n ≤ 100000
-    uniform_int_distribution<int> Dn(1, 1000);
+    // 2 ≤ n ≤ 10000  (you can bump this up if you like)
+    uniform_int_distribution<int> Dn(2, 10000);
     int n = Dn(rng);
 
-    // 1 ≤ k ≤ n
-    uniform_int_distribution<int> Dk(1, n);
-    int k = Dk(rng);
+    // −1e9 ≤ A[i] ≤ 1e9
+    uniform_int_distribution<long long> Da(-1000000000LL, 1000000000LL);
 
-    cout << n << " " << k << "\n";
-
-    // −100000 ≤ A[i] ≤ 100000
-    uniform_int_distribution<int> Da(-100000, 1000000);
+    // print as: [a0,a1,...,a(n-1)]
+    cout << '[';
     for (int i = 0; i < n; i++) {
-        cout << Da(rng) << (i+1 == n ? '\n' : ' ');
+        cout << Da(rng);
+        if (i + 1 < n) 
+            cout << ',';
     }
+    cout << ']' << '\n';
+
+    // −1e9 ≤ k ≤ 1e9
+    uniform_int_distribution<long long> Dk(-1000000000LL, 1000000000LL);
+    long long k = Dk(rng);
+    cout << k << "\n";
+
     return 0;
 }

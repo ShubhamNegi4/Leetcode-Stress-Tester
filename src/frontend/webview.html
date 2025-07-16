@@ -1,58 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 1em;
-    }
-
-    input {
-      width: 200px;
-      margin-right: .5em;
-    }
-
-    button {
-      margin: .5em 0;
-    }
+    body { font-family: sans-serif; padding: 1em; background: #f5f5f5; }
+    input { width: 200px; margin-right: .5em; }
+    button { margin: .5em 0; }
+    pre { background: #eee; padding: 1em; white-space: pre-wrap; }
+    #status { padding: .5em; margin-top: .5em; }
+    .fail { color: #b00020; background: #fcdcdc; }
+    .pass { color: #0a7e07; background: #dcf8dc; }
+    .sample { border: 1px solid #ccc; border-radius: 4px; margin: .5em 0; padding: .5em; background: #fff; }
+    .sample h4 { margin: .2em 0; }
   </style>
 </head>
-
 <body>
   <h2>LeetCode Stress Tester</h2>
   <div>
     <input id="problemId" placeholder="e.g. two-sum" />
-    <button id="start">Fetch & Stress Test</button>
+    <button id="runSamples">Run Sample Tests</button>
+    <button id="runStress">Run Stress Tests</button>
   </div>
-  <div id="status">Idle</div>
+  <div id="status" class="pass">Idle</div>
+  <div id="detail"></div>
+
   <script>
     const vscode = acquireVsCodeApi();
-    document.getElementById('start').addEventListener('click', () => {
-      const id = document.getElementById('problemId').value.trim();
-      if (id) vscode.postMessage({ command: 'fetchProblemInfo', id });
-    });
+    const status = document.getElementById('status');
+    const detail = document.getElementById('detail');
+    let samplesContainer;
+
+    document.getElementById('runSamples').onclick = () => {
+      detail.innerHTML = '';
+      samplesContainer = document.createElement('div');
+      detail.appendChild(samplesContainer);
+      status.textContent = 'Starting sample tests…';
+      status.className = 'pass';
+      vscode.postMessage({ command: 'runSamples', id: problemId.value.trim() });
+    };
+
+    document.getElementById('runStress').onclick = () => {
+      detail.innerHTML = '';
+      status.textContent = 'Starting stress tests…';
+      status.className = 'pass';
+      vscode.postMessage({ command: 'runStress', id: problemId.value.trim() });
+    };
 
     window.addEventListener('message', event => {
       const msg = event.data;
-      const st = document.getElementById('status');
       switch (msg.command) {
         case 'progress':
-          st.textContent = `Running ${msg.i}/${msg.total}`;
+          status.textContent = `Running ${msg.i}/${msg.total}…`;
+          break;
+        case 'sample':
+          // display each sample's I/O
+          const div = document.createElement('div');
+          div.className = 'sample';
+          div.innerHTML = `
+            <h4>Sample #${msg.caseIndex}</h4>
+            <strong>Input:</strong><pre>${msg.input}</pre>
+            <strong>Brute Output:</strong><pre>${msg.brute}</pre>
+            <strong>Solution Output:</strong><pre>${msg.solution}</pre>
+          `;
+          samplesContainer.appendChild(div);
           break;
         case 'fail':
-          st.innerHTML = `<strong>Failed on input:</strong><pre>${msg.input}</pre>`;
+          status.textContent = `✖ Test #${msg.caseIndex} failed`;
+          status.className = 'fail';
           break;
         case 'done':
-          st.textContent = '✅ All tests passed!';
+          status.textContent = '✔ All tests passed!';
+          status.className = 'pass';
           break;
         case 'error':
-          st.textContent = `Error: ${msg.error}`;
+          status.textContent = `❌ Error: ${msg.error}`;
+          status.className = 'fail';
           break;
       }
     });
   </script>
 </body>
-
 </html>

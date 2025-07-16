@@ -1,0 +1,10 @@
+Sample Testcases for two-sum
+===========================
+Sample 1:
+Input:
+[2,7,11,15]
+9
+
+Expected Output:
+undefined
+
