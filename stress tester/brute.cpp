@@ -1,17 +1,17 @@
 #include <bits/stdc++.h>
 using namespace std;
 vector<int> twoSum(const vector<long long>& nums, long long target) {
-    int n = (int)nums.size();
-    unordered_map<long long,int> mp;
-    mp.reserve(nums.size());
-    for (int i = 0; i < (int)nums.size(); ++i) {
-        long long need = target - nums[i];
-        auto it = mp.find(need);
-        if (it != mp.end()) {
-            return { it->second, i };
-        }
-        mp[nums[i]] = i;
-    }
+    // int n = (int)nums.size();
+    // unordered_map<long long,int> mp;
+    // mp.reserve(nums.size());
+    // for (int i = 0; i < (int)nums.size(); ++i) {
+    //     long long need = target - nums[i];
+    //     auto it = mp.find(need);
+    //     if (it != mp.end()) {
+    //         return { it->second, i };
+    //     }
+    //     mp[nums[i]] = i;
+    // }
     return {-1, -1};
 }
 vector<long long> readJsonArray() {

@@ -15,7 +15,8 @@ function mkTempDir(prefix = 'lc-stress-') {
  */
 function copyTemplates(dest) {
   const tplDir = path.resolve(__dirname, '..', '..', 'stress tester');
-  ['brute.cpp', 'solution.cpp'].forEach(f => {
+  console.log('Template dir is:', tplDir);
+  ['brute.cpp', 'solution.cpp', 'gen.cpp', 'run.js', 'stress.sh'].forEach(f => {
     fs.copyFileSync(path.join(tplDir, f), path.join(dest, f));
   });
 }

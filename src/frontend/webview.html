@@ -2,27 +2,49 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: sans-serif; padding: 1em; background: #f5f5f5; }
-    input { width: 200px; margin-right: .5em; }
-    button { margin: .5em 0; }
-    pre { background: #eee; padding: 1em; white-space: pre-wrap; }
-    #status { padding: .5em; margin-top: .5em; }
-    .fail { color: #b00020; background: #fcdcdc; }
-    .pass { color: #0a7e07; background: #dcf8dc; }
-    .sample { border: 1px solid #ccc; border-radius: 4px; margin: .5em 0; padding: .5em; background: #fff; }
-    .sample h4 { margin: .2em 0; }
+    /* subtle fade-in animation */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
-<body>
-  <h2>LeetCode Stress Tester</h2>
-  <div>
-    <input id="problemId" placeholder="e.g. two-sum" />
-    <button id="runSamples">Run Sample Tests</button>
-    <button id="runStress">Run Stress Tests</button>
+<body class="bg-gradient-to-r from-blue-50 to-purple-50 font-sans">
+  <div class="max-w-3xl mx-auto p-6">
+    <h1 class="text-3xl font-extrabold mb-6 text-center text-purple-700 animate-pulse">LeetCode Stress Tester</h1>
+
+    <!-- Control Panel -->
+    <div class="flex flex-col sm:flex-row items-center gap-4 mb-8">
+      <input
+        id="problemId"
+        type="text"
+        placeholder="e.g. two-sum"
+        class="flex-1 px-4 py-3 border-2 rounded-lg focus:outline-none focus:ring-4 focus:ring-purple-300 transition-shadow"
+      />
+      <button
+        id="runSamples"
+        class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-transform"
+      >
+        Run Samples
+      </button>
+      <button
+        id="runStress"
+        class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-transform"
+      >
+        Run Stress
+      </button>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status" class="text-center py-3 mb-6 rounded-lg bg-white text-gray-700 shadow animate-fadeIn">
+      Idle
+    </div>
+
+    <!-- Results -->
+    <div id="detail" class="space-y-6"></div>
   </div>
-  <div id="status" class="pass">Idle</div>
-  <div id="detail"></div>
 
   <script>
     const vscode = acquireVsCodeApi();
@@ -30,19 +52,29 @@
     const detail = document.getElementById('detail');
     let samplesContainer;
 
+    function setStatus(text, type = 'info') {
+      const themes = {
+        info:    ['bg-white','text-gray-700'],
+        running: ['bg-yellow-100','text-yellow-800'],
+        pass:    ['bg-green-100','text-green-800'],
+        fail:    ['bg-red-100','text-red-800'],
+      };
+      const [bg, txt] = themes[type] || themes.info;
+      status.textContent = text;
+      status.className = `text-center py-3 mb-6 rounded-lg shadow ${bg} ${txt} animate-fadeIn`;
+    }
+
     document.getElementById('runSamples').onclick = () => {
       detail.innerHTML = '';
       samplesContainer = document.createElement('div');
       detail.appendChild(samplesContainer);
-      status.textContent = 'Starting sample tests…';
-      status.className = 'pass';
+      setStatus('Starting sample tests…','running');
       vscode.postMessage({ command: 'runSamples', id: problemId.value.trim() });
     };
 
     document.getElementById('runStress').onclick = () => {
       detail.innerHTML = '';
-      status.textContent = 'Starting stress tests…';
-      status.className = 'pass';
+      setStatus('Starting stress tests…','running');
       vscode.postMessage({ command: 'runStress', id: problemId.value.trim() });
     };
 
@@ -50,31 +82,54 @@
       const msg = event.data;
       switch (msg.command) {
         case 'progress':
-          status.textContent = `Running ${msg.i}/${msg.total}…`;
+          setStatus(`Running ${msg.i}/${msg.total}…`, 'running');
           break;
-        case 'sample':
-          // display each sample's I/O
-          const div = document.createElement('div');
-          div.className = 'sample';
-          div.innerHTML = `
-            <h4>Sample #${msg.caseIndex}</h4>
-            <strong>Input:</strong><pre>${msg.input}</pre>
-            <strong>Brute Output:</strong><pre>${msg.brute}</pre>
-            <strong>Solution Output:</strong><pre>${msg.solution}</pre>
-          `;
-          samplesContainer.appendChild(div);
-          break;
-        case 'fail':
-          status.textContent = `✖ Test #${msg.caseIndex} failed`;
-          status.className = 'fail';
-          break;
+
+        case 'sample': {
+          const card = document.createElement('div');
+          card.className = 'bg-white rounded-lg shadow-lg p-6 animate-fadeIn transform hover:scale-102 transition-all';
+          card.innerHTML = `
+            <h3 class="text-xl font-semibold text-purple-700 mb-2">Sample #${msg.caseIndex}</h3>
+            <div class="mb-4"><strong>Input:</strong><pre class="bg-gray-100 p-3 rounded-lg">${msg.input}</pre></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <div class="font-medium text-blue-600 mb-1">Expected</div>
+                <pre class="bg-gray-100 p-3 rounded-lg">${msg.expected}</pre>
+              </div>
+              <div>
+                <div class="font-medium text-indigo-600 mb-1">Solution</div>
+                <pre class="bg-gray-100 p-3 rounded-lg">${msg.solution}</pre>
+              </div>
+            </div>`;
+          samplesContainer.appendChild(card);
+        } break;
+
+        case 'fail': {
+          setStatus(`✖ Test #${msg.caseIndex} failed`, 'fail');
+          const failCard = document.createElement('div');
+          failCard.className = 'bg-red-50 rounded-lg shadow-lg p-6 animate-fadeIn';
+          failCard.innerHTML = `
+            <h3 class="text-xl font-bold text-red-600 mb-2">Failure #${msg.caseIndex}</h3>
+            <div class="mb-4"><strong>Input:</strong><pre class="bg-gray-100 p-3 rounded-lg">${msg.input}</pre></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <div class="font-medium text-blue-600 mb-1">Expected</div>
+                <pre class="bg-gray-100 p-3 rounded-lg">${msg.expected}</pre>
+              </div>
+              <div>
+                <div class="font-medium text-red-600 mb-1">Your Solution</div>
+                <pre class="bg-gray-100 p-3 rounded-lg">${msg.solution}</pre>
+              </div>
+            </div>`;
+          detail.appendChild(failCard);
+        } break;
+
         case 'done':
-          status.textContent = '✔ All tests passed!';
-          status.className = 'pass';
+          setStatus('✔ All tests passed!', 'pass');
           break;
+
         case 'error':
-          status.textContent = `❌ Error: ${msg.error}`;
-          status.className = 'fail';
+          setStatus(`❌ ${msg.error}`, 'fail');
           break;
       }
     });
