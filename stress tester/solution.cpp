@@ -1,6 +1,8 @@
 #include <bits/stdc++.h>
 using namespace std;
-vector<int> twoSum(const vector<long long>& nums, long long target) {
+class Solution{
+    public:
+    vector<int> twoSum(vector<int>& nums, int target) {
     int n = (int)nums.size();
     unordered_map<long long,int> mp;
     mp.reserve(nums.size());
@@ -14,6 +16,7 @@ vector<int> twoSum(const vector<long long>& nums, long long target) {
     }
     return {-1, -1};
 }
+};
 vector<long long> readJsonArray() {
     string s;
     getline(cin, s);
@@ -30,17 +33,25 @@ vector<long long> readJsonArray() {
     return v;
 }
 int main() {
+    // Fast I/O
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    // int n;
-    // cin >> n;                      
-    auto nums = readJsonArray();
+    // 1. Read the input using the helpers
+    auto nums_long = readJsonArray();
+    long long target_long;
+    cin >> target_long;
 
-    long long target;
-    cin >> target;   
+    // 2. Convert to the types LeetCode expects (vector<int>, int)
+    vector<int> nums(nums_long.begin(), nums_long.end());
+    int target = target_long;
 
-    auto ans = twoSum(nums, target);
-    cout << ans[0] << " " << ans[1] << "\n";
+    // 3. Create an instance of the Solution class and call the method
+    Solution sol;
+    vector<int> ans = sol.twoSum(nums, target);
+
+    // 4. Print the result in the standard JSON array format
+    cout << "[" << ans[0] << "," << ans[1] << "]" << endl;
+
     return 0;
 }
