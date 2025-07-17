@@ -1,57 +1,75 @@
 #include <bits/stdc++.h>
 using namespace std;
-class Solution{
-    public:
+
+class Solution {
+public:
     vector<int> twoSum(vector<int>& nums, int target) {
-    int n = (int)nums.size();
-    unordered_map<long long,int> mp;
-    mp.reserve(nums.size());
-    for (int i = 0; i < (int)nums.size(); ++i) {
-        long long need = target - nums[i];
-        auto it = mp.find(need);
-        if (it != mp.end()) {
-            return { it->second, i };
+        for (int i = 0; i < nums.size(); i++) {
+            for (int j = i + 1; j < nums.size(); j++) {
+                if (nums[j] == target - nums[i]) {
+                    return {i, j};
+                }
+            }
         }
-        mp[nums[i]] = i;
+        // Return an empty vector if no solution is found
+        return {};
     }
-    return {-1, -1};
-}
 };
-vector<long long> readJsonArray() {
-    string s;
-    getline(cin, s);
-    // remove brackets
-    s.erase(remove(s.begin(), s.end(), '['), s.end());
-    s.erase(remove(s.begin(), s.end(), ']'), s.end());
-    stringstream ss(s);
-    vector<long long> v;
-    long long x;
-    while (ss >> x) {
-        v.push_back(x);
-        if (ss.peek() == ',') ss.ignore();
+
+// Utility: Parse a vector from a string like "[1,2,3,4]"
+vector<int> parseVector(const string& s) {
+    vector<int> res;
+    int num = 0, sign = 1;
+    bool inNum = false;
+    for (char c : s) {
+        if (c == '-') sign = -1;
+        if (isdigit(c)) {
+            num = num * 10 + (c - '0');
+            inNum = true;
+        } else if (inNum) {
+            res.push_back(num * sign);
+            num = 0; sign = 1; inNum = false;
+        }
     }
-    return v;
+    if (inNum) res.push_back(num * sign);
+    return res;
 }
+
+vector<int> readVectorFromStdin() {
+    string line;
+    while (getline(cin, line)) {
+        if (line.find('[') != string::npos) {
+            return parseVector(line);
+        }
+    }
+    return {};
+}
+
+int readIntFromStdin() {
+    string line;
+    int value;
+    while (getline(cin, line)) {
+        stringstream ss(line);
+        if (ss >> value) return value;
+    }
+    return 0; // Default if not found
+}
+
 int main() {
-    // Fast I/O
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
+    vector<int> nums = readVectorFromStdin();
+    int target = readIntFromStdin();
 
-    // 1. Read the input using the helpers
-    auto nums_long = readJsonArray();
-    long long target_long;
-    cin >> target_long;
-
-    // 2. Convert to the types LeetCode expects (vector<int>, int)
-    vector<int> nums(nums_long.begin(), nums_long.end());
-    int target = target_long;
-
-    // 3. Create an instance of the Solution class and call the method
+    // --- Your solution code here ---
     Solution sol;
-    vector<int> ans = sol.twoSum(nums, target);
-
-    // 4. Print the result in the standard JSON array format
-    cout << "[" << ans[0] << "," << ans[1] << "]" << endl;
-
+    vector<int> result = sol.twoSum(nums, target);
+    
+    // Format output
+    cout << "[";
+    for (int i = 0; i < result.size(); i++) {
+        cout << result[i];
+        if (i < result.size() - 1) cout << ",";
+    }
+    cout << "]" << endl;
+    
     return 0;
 }

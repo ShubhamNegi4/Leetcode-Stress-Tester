@@ -2,134 +2,343 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>LeetCode Stress Tester</title>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,500,600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <style>
-    /* subtle fade-in animation */
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      margin: 0;
+      min-height: 100vh;
+      color: #334155;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 24px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      text-align: center;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 24px;
+      font-size: 24px;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.2s;
+      background: #f8fafc;
+    }
+
+    input[type="text"]:focus {
+      border-color: #64748b;
+      background: #fff;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .btn.green { background: #10b981; color: #fff; }
+    .btn.purple { background: #8b5cf6; color: #fff; }
+    .btn.blue { background: #3b82f6; color: #fff; }
+
+    .btn:hover { 
+      transform: translateY(-1px); 
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    .banner {
+      margin: 12px 0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-weight: 500;
+      text-align: center;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .banner.success { background: #dcfce7; color: #166534; }
+    .banner.error { background: #fef2f2; color: #991b1b; }
+    .banner.info { background: #dbeafe; color: #1e40af; }
+    .banner.visible { opacity: 1; pointer-events: auto; transition: opacity 0.3s; }
+    .banner.hidden { opacity: 0; pointer-events: none; }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      margin: 12px 0;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .sample-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin: 16px 0;
+      padding: 16px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    .sample-card h3 {
+      color: #475569;
+      margin-bottom: 12px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .sample-card .input-section,
+    .sample-card .output-section {
+      margin-bottom: 12px;
+    }
+
+    .sample-card .label {
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #475569;
+      font-size: 13px;
+    }
+
+    .sample-card .code-block {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #334155;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.4;
+    }
+
+    .sample-card .output-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .sample-card .expected .label { color: #2563eb; }
+    .sample-card .solution .label { color: #059669; }
+
+    .test-counter {
+      text-align: center;
+      font-size: 13px;
+      color: #64748b;
+      margin: 8px 0;
+    }
+
+    @media (max-width: 800px) {
+      .container {
+        padding: 16px;
+        max-width: 98vw;
+      }
+      .input-group {
+        flex-direction: column;
+        gap: 8px;
+      }
+      .sample-card .output-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
-<body class="bg-gradient-to-r from-blue-50 to-purple-50 font-sans">
-  <div class="max-w-3xl mx-auto p-6">
-    <h1 class="text-3xl font-extrabold mb-6 text-center text-purple-700 animate-pulse">LeetCode Stress Tester</h1>
-
-    <!-- Control Panel -->
-    <div class="flex flex-col sm:flex-row items-center gap-4 mb-8">
-      <input
-        id="problemId"
-        type="text"
-        placeholder="e.g. two-sum"
-        class="flex-1 px-4 py-3 border-2 rounded-lg focus:outline-none focus:ring-4 focus:ring-purple-300 transition-shadow"
-      />
-      <button
-        id="runSamples"
-        class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-transform"
-      >
-        Run Samples
-      </button>
-      <button
-        id="runStress"
-        class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-transform"
-      >
-        Run Stress
-      </button>
+<body>
+  <div class="container">
+    <h1>LeetCode Stress Tester</h1>
+    <div class="input-group">
+      <input id="problem-id" type="text" placeholder="Enter Problem ID or Slug" />
+      <button id="fetch-btn" class="btn green">Fetch Problem</button>
+      <button id="run-samples-btn" class="btn purple">Run Samples</button>
+      <button id="run-stress-btn" class="btn blue">Run Stress</button>
     </div>
-
-    <!-- Status Bar -->
-    <div id="status" class="text-center py-3 mb-6 rounded-lg bg-white text-gray-700 shadow animate-fadeIn">
-      Idle
+    <div id="status-banner" class="banner hidden"></div>
+    <div id="progress-container" style="display: none;">
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="test-counter" class="test-counter"></div>
     </div>
-
-    <!-- Results -->
-    <div id="detail" class="space-y-6"></div>
+    <div id="samples"></div>
   </div>
-
+  
   <script>
     const vscode = acquireVsCodeApi();
-    const status = document.getElementById('status');
-    const detail = document.getElementById('detail');
-    let samplesContainer;
-
-    function setStatus(text, type = 'info') {
-      const themes = {
-        info:    ['bg-white','text-gray-700'],
-        running: ['bg-yellow-100','text-yellow-800'],
-        pass:    ['bg-green-100','text-green-800'],
-        fail:    ['bg-red-100','text-red-800'],
-      };
-      const [bg, txt] = themes[type] || themes.info;
-      status.textContent = text;
-      status.className = `text-center py-3 mb-6 rounded-lg shadow ${bg} ${txt} animate-fadeIn`;
+    
+    // Animate banner
+    function showBanner(type, message) {
+      const banner = document.getElementById('status-banner');
+      banner.className = `banner ${type} visible`;
+      banner.textContent = message;
+      gsap.fromTo(banner, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" });
+      setTimeout(() => {
+        gsap.to(banner, { opacity: 0, duration: 0.3, onComplete: () => banner.classList.remove('visible') });
+      }, 3000);
     }
 
-    document.getElementById('runSamples').onclick = () => {
-      detail.innerHTML = '';
-      samplesContainer = document.createElement('div');
-      detail.appendChild(samplesContainer);
-      setStatus('Starting sample tests…','running');
-      vscode.postMessage({ command: 'runSamples', value: problemId.value.trim() });
-    };
+    // Show progress
+    function showProgress(current, total) {
+      const container = document.getElementById('progress-container');
+      const fill = document.getElementById('progress-fill');
+      const counter = document.getElementById('test-counter');
+      
+      container.style.display = 'block';
+      const percentage = (current / total) * 100;
+      fill.style.width = percentage + '%';
+      counter.textContent = `Running test ${current} of ${total}...`;
+    }
 
-    document.getElementById('runStress').onclick = () => {
-      detail.innerHTML = '';
-      setStatus('Starting stress tests…','running');
-      vscode.postMessage({ command: 'runStress', value: problemId.value.trim() });
-    };
+    // Hide progress
+    function hideProgress() {
+      document.getElementById('progress-container').style.display = 'none';
+    }
 
+    // Animate sample cards
+    function animateSampleCards() {
+      gsap.utils.toArray('.sample-card').forEach((card, i) => {
+        gsap.to(card, { opacity: 1, y: 0, delay: 0.1 + i * 0.05, duration: 0.4, ease: "power2.out" });
+      });
+    }
+
+    // Animate button hover
+    ['fetch-btn', 'run-samples-btn', 'run-stress-btn'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('mouseenter', () => {
+          gsap.to(btn, { scale: 1.02, duration: 0.15, ease: "power1.out" });
+        });
+        btn.addEventListener('mouseleave', () => {
+          gsap.to(btn, { scale: 1, duration: 0.15, ease: "power1.in" });
+        });
+      }
+    });
+
+    // Create sample card
+    function createSampleCard(caseIndex, input, expected, solution) {
+      const card = document.createElement('div');
+      card.className = 'sample-card';
+      card.innerHTML = `
+        <h3>Sample #${caseIndex}</h3>
+        <div class="input-section">
+          <div class="label">Input:</div>
+          <div class="code-block">${input}</div>
+        </div>
+        <div class="output-grid">
+          <div class="expected">
+            <div class="label">Expected:</div>
+            <div class="code-block">${expected}</div>
+          </div>
+          <div class="solution">
+            <div class="label">Solution:</div>
+            <div class="code-block">${solution}</div>
+          </div>
+        </div>
+      `;
+      return card;
+    }
+
+    // Button event listeners
+    document.getElementById('fetch-btn').addEventListener('click', () => {
+      const problemId = document.getElementById('problem-id').value.trim();
+      if (!problemId) {
+        showBanner('error', 'Please enter a problem ID or slug');
+        return;
+      }
+      showBanner('info', 'Fetching problem...');
+      vscode.postMessage({ command: 'fetchProblem', value: problemId });
+    });
+
+    document.getElementById('run-samples-btn').addEventListener('click', () => {
+      const problemId = document.getElementById('problem-id').value.trim();
+      if (!problemId) {
+        showBanner('error', 'Please enter a problem ID or slug');
+        return;
+      }
+      document.getElementById('samples').innerHTML = '';
+      showBanner('info', 'Starting sample tests...');
+      vscode.postMessage({ command: 'runSamples', value: problemId });
+    });
+
+    document.getElementById('run-stress-btn').addEventListener('click', () => {
+      const problemId = document.getElementById('problem-id').value.trim();
+      if (!problemId) {
+        showBanner('error', 'Please enter a problem ID or slug');
+        return;
+      }
+      document.getElementById('samples').innerHTML = '';
+      showBanner('info', 'Starting stress tests...');
+      vscode.postMessage({ command: 'runStress', value: problemId });
+    });
+
+    // Handle messages from extension
     window.addEventListener('message', event => {
       const msg = event.data;
       switch (msg.command) {
         case 'progress':
-          setStatus(`Running ${msg.i}/${msg.total}…`, 'running');
+          showProgress(msg.i, msg.total);
           break;
-
-        case 'sample': {
-          const card = document.createElement('div');
-          card.className = 'bg-white rounded-lg shadow-lg p-6 animate-fadeIn transform hover:scale-102 transition-all';
-          card.innerHTML = `
-            <h3 class="text-xl font-semibold text-purple-700 mb-2">Sample #${msg.caseIndex}</h3>
-            <div class="mb-4"><strong>Input:</strong><pre class="bg-gray-100 p-3 rounded-lg">${msg.input}</pre></div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <div class="font-medium text-blue-600 mb-1">Expected</div>
-                <pre class="bg-gray-100 p-3 rounded-lg">${msg.expected}</pre>
-              </div>
-              <div>
-                <div class="font-medium text-indigo-600 mb-1">Solution</div>
-                <pre class="bg-gray-100 p-3 rounded-lg">${msg.solution}</pre>
-              </div>
-            </div>`;
+        case 'sample':
+          const samplesContainer = document.getElementById('samples');
+          const card = createSampleCard(msg.caseIndex, msg.input, msg.expected, msg.solution);
           samplesContainer.appendChild(card);
-        } break;
-
-        case 'fail': {
-          setStatus(`✖ Test #${msg.caseIndex} failed`, 'fail');
-          const failCard = document.createElement('div');
-          failCard.className = 'bg-red-50 rounded-lg shadow-lg p-6 animate-fadeIn';
-          failCard.innerHTML = `
-            <h3 class="text-xl font-bold text-red-600 mb-2">Failure #${msg.caseIndex}</h3>
-            <div class="mb-4"><strong>Input:</strong><pre class="bg-gray-100 p-3 rounded-lg">${msg.input}</pre></div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <div class="font-medium text-blue-600 mb-1">Expected</div>
-                <pre class="bg-gray-100 p-3 rounded-lg">${msg.expected}</pre>
-              </div>
-              <div>
-                <div class="font-medium text-red-600 mb-1">Your Solution</div>
-                <pre class="bg-gray-100 p-3 rounded-lg">${msg.solution}</pre>
-              </div>
-            </div>`;
-          detail.appendChild(failCard);
-        } break;
-
-        case 'done':
-          setStatus('✔ All tests passed!', 'pass');
+          animateSampleCards();
           break;
-
+        case 'fail':
+          hideProgress();
+          showBanner('error', `Test #${msg.caseIndex} failed`);
+          const failCard = createSampleCard(msg.caseIndex, msg.input, msg.expected, msg.solution);
+          failCard.style.border = '2px solid #ef4444';
+          document.getElementById('samples').appendChild(failCard);
+          animateSampleCards();
+          break;
+        case 'done':
+          hideProgress();
+          showBanner('success', 'All tests passed!');
+          break;
         case 'error':
-          setStatus(`❌ ${msg.error}`, 'fail');
+          hideProgress();
+          showBanner('error', msg.error);
           break;
       }
     });

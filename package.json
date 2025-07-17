@@ -5,13 +5,22 @@
   "version": "0.1.0",
   "engines": { "vscode": "^1.64.0" },
   "categories": ["Other"],
-  "activationEvents": ["onCommand:competitive-companion-v2.showStressTester"],
+  "activationEvents": [
+    "onCommand:competitive-companion-v2.showStressTester",
+    "onCommand:competitive-companion-v2.fetchProblem"
+  ],
   "main": "./src/frontend/extension.js",
   "contributes": {
-    "commands": [{
-      "command": "competitive-companion-v2.showStressTester",
-      "title":   "Competitive Companion: Stress Tester"
-    }],
+    "commands": [
+      {
+        "command": "competitive-companion-v2.showStressTester",
+        "title": "Competitive Companion: Stress Tester"
+      },
+      {
+        "command": "competitive-companion-v2.fetchProblem",
+        "title": "Fetch LeetCode Problem"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Competitive Companion Settings",

@@ -1,42 +1,62 @@
 #include <bits/stdc++.h>
 using namespace std;
 
+// $SOLUTION_PLACEHOLDER
 
-vector<long long> readJsonArray() {
-    string s;
-    getline(cin, s);
-    s.erase(remove(s.begin(), s.end(), '['), s.end());
-    s.erase(remove(s.begin(), s.end(), ']'), s.end());
-    stringstream ss(s);
-    vector<long long> v;
-    long long x;
-    char comma;
-
-    while (ss >> x) {
-        v.push_back(x);
-        if (ss >> comma && comma == ',') {
-            // continue
+// Utility: Parse a vector from a string like "[1,2,3,4]"
+vector<int> parseVector(const string& s) {
+    vector<int> res;
+    int num = 0, sign = 1;
+    bool inNum = false;
+    for (char c : s) {
+        if (c == '-') sign = -1;
+        if (isdigit(c)) {
+            num = num * 10 + (c - '0');
+            inNum = true;
+        } else if (inNum) {
+            res.push_back(num * sign);
+            num = 0; sign = 1; inNum = false;
         }
     }
-    return v;
+    if (inNum) res.push_back(num * sign);
+    return res;
+}
+
+vector<int> readVectorFromStdin() {
+    string line;
+    while (getline(cin, line)) {
+        if (line.find('[') != string::npos) {
+            return parseVector(line);
+        }
+    }
+    return {};
+}
+
+int readIntFromStdin() {
+    string line;
+    int value;
+    while (getline(cin, line)) {
+        stringstream ss(line);
+        if (ss >> value) return value;
+    }
+    return 0; // Default if not found
 }
 
 int main() {
+    vector<int> nums = readVectorFromStdin();
+    int target = readIntFromStdin();
 
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-
-    // The user should implement the logic to read input,
-    // call the solution method, and print the result.
-
-    // Example for a problem that takes one array as input:
-    // auto nums = readJsonArray();
-    // Solution sol;
-    // auto result = sol.someMethod(nums);
-    // for(int i = 0; i < result.size(); ++i) {
-    //     cout << result[i] << (i == result.size() - 1 ? "" : ",");
-    // }
-    // cout << endl;
-
+    // --- Your solution code here ---
+    Solution sol;
+    vector<int> result = sol.twoSum(nums, target);
+    
+    // Format output
+    cout << "[";
+    for (int i = 0; i < result.size(); i++) {
+        cout << result[i];
+        if (i < result.size() - 1) cout << ",";
+    }
+    cout << "]" << endl;
+    
     return 0;
 }
