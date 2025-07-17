@@ -69,13 +69,13 @@
       samplesContainer = document.createElement('div');
       detail.appendChild(samplesContainer);
       setStatus('Starting sample tests…','running');
-      vscode.postMessage({ command: 'runSamples', id: problemId.value.trim() });
+      vscode.postMessage({ command: 'runSamples', value: problemId.value.trim() });
     };
 
     document.getElementById('runStress').onclick = () => {
       detail.innerHTML = '';
       setStatus('Starting stress tests…','running');
-      vscode.postMessage({ command: 'runStress', id: problemId.value.trim() });
+      vscode.postMessage({ command: 'runStress', value: problemId.value.trim() });
     };
 
     window.addEventListener('message', event => {

@@ -16,7 +16,7 @@ function openWebview(context) {
   panel.webview.html = fs.readFileSync(htmlPath, 'utf8');
 
   panel.webview.onDidReceiveMessage(msg => {
-    handleFetchAndStress(msg.id, panel, msg.command)
+    handleFetchAndStress(msg.value, panel, msg.command)
       .catch(err => {
         panel.webview.postMessage({ command: 'error', error: err.message });
       });

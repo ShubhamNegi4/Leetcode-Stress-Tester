@@ -5,7 +5,7 @@ const path     = require('path');
 const { execSync } = require('child_process');
 const vscode   = require('vscode');
 
-const { fetchProblemInfo, fetchOfficialSolution, fetchGithubSolution } = require('./fetch.js');
+const { fetchProblemByName, fetchProblemById, fetchOfficialSolution, fetchGithubSolution }       = require('./fetch.js');
 const { mkTempDir, copyTemplates } = require('./makeDirs.js');
 const { extractSamples }            = require('./parseProblem.js');
 
@@ -16,23 +16,36 @@ function parseNumbers(str) {
 }
 
 async function handleFetchAndStress(slug, panel, mode) {
-  const q = await fetchProblemInfo(slug);
-  if (!q) throw new Error('Problem not found');
 
-  // Try fetching official solution from LeetCode
-  let isAvailable = await fetchOfficialSolution(slug);
-  console.log("LeetCode result:", isAvailable);
+  const isInteger = /^\d+$/.test(slug);
+  const isSlug = /^[a-zA-Z0-9-]+$/.test(slug);
+
+  let problemTitle=slug;
+
+  if(isInteger){
+    problemTitle = await fetchProblemById(Number(slug));
+  }
+  else if(isInteger){
+    throw new Error("Problem Not Found");
+  }
+
+  let q;
+  q= await fetchProblemByName(problemTitle);
+
+  let isAvailable = await fetchOfficialSolution(problemTitle);
+
 
   if (isAvailable) {
     console.log("Fetched from LeetCode");
   } else {
     console.log("Not available on LeetCode, searching on GitHub...");
 
-    isAvailable = await fetchGithubSolution(slug);
+    isAvailable = await fetchGithubSolution(problemTitle);
+
     if (isAvailable) {
       console.log("Fetched from GitHub");
     } else {
-      console.log("Sorry, no solution available.");
+      throw new Error("Sorry, we dont have official solution");
     }
   }
 
