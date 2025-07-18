@@ -17,7 +17,7 @@ function openWebview(context) {
     panel.webview.onDidReceiveMessage(msg => {
         if (msg.command === 'fetchProblem') {
             // Execute the fetch command
-            vscode.commands.executeCommand('competitive-companion-v2.fetchProblem', msg.value)
+            vscode.commands.executeCommand('leetcode-stress-tester.fetchProblem', msg.value)
                 .catch(err => {
                     panel.webview.postMessage({ command: 'error', error: err.message });
                 });

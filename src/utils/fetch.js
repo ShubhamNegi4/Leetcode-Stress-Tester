@@ -120,7 +120,7 @@ async function fetchOfficialSolutionPlayground(slug) {
     return match ? match[1] : null;
 }
 
-async function fetchOfficialSolution(slug) {
+async function fetchOfficialSolution(slug, targetDir) {
     const playgroundUUID = await fetchOfficialSolutionPlayground(slug);
     if (!playgroundUUID) return false;
 
@@ -152,19 +152,19 @@ async function fetchOfficialSolution(slug) {
     
     if (!cppSolution) return false;
     
-    const filePath = path.join(__dirname, '..', '..', 'stress tester', 'official.cpp');
+    const filePath = path.join(targetDir, 'official.cpp');
     fs.writeFileSync(filePath, cppSolution);
     return true;
 }
 
-async function fetchGithubSolution(slug) {
+async function fetchGithubSolution(slug, targetDir) {
     const url = `https://raw.githubusercontent.com/kamyu104/LeetCode-Solutions/master/C++/${slug}.cpp`;
     const res = await fetch(url);
     
     if (!res.ok) return false;
     
     const codeCPP = await res.text();
-    const filePath = path.join(__dirname, '..', '..', 'stress tester', 'official.cpp');
+    const filePath = path.join(targetDir, 'official.cpp');
     fs.writeFileSync(filePath, codeCPP);
     return true;
 }

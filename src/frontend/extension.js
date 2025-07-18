@@ -6,7 +6,7 @@ const { handleFetchProblem } = require('../utils/stressRunner.js');
 function activate(context) {
     // Register showStressTester command
     const showDisposable = vscode.commands.registerCommand(
-        'competitive-companion-v2.showStressTester',
+        'leetcode-stress-tester.showStressTester',
         () => {
             openWebview(context);
         }
@@ -14,7 +14,7 @@ function activate(context) {
     
     // Register fetchProblem command
     const fetchDisposable = vscode.commands.registerCommand(
-        'competitive-companion-v2.fetchProblem',
+        'leetcode-stress-tester.fetchProblem',
         async (slug) => {
             try {
                 await handleFetchProblem(slug);

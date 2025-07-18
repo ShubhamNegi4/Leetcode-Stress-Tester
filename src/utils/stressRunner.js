@@ -3,15 +3,21 @@ const path = require('path');
 const { execSync } = require('child_process');
 const vscode = require('vscode');
 
-const { 
-    fetchProblemByName, 
-    fetchProblemById, 
-    fetchOfficialSolution, 
-    fetchGithubSolution 
+const {
+    fetchProblemByName,
+    fetchProblemById,
+    fetchOfficialSolution,
+    fetchGithubSolution
 } = require('./fetch.js');
 
 const { copyTemplates } = require('./makeDirs.js');
 const { extractSamples } = require('./parseProblem.js');
+
+function getWorkspaceRoot() {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || !folders.length) throw new Error('No workspace folder open');
+    return folders[0].uri.fsPath;
+}
 
 function parseNumbers(str) {
     const m = str.match(/-?\d+/g);
@@ -22,17 +28,17 @@ function parseNumbers(str) {
 function formatSampleInput(input) {
     const numbers = input.match(/-?\d+/g) || [];
     if (numbers.length < 2) return input;
-    
     const target = numbers.pop();
     const array = `[${numbers.join(',')}]`;
-    
     return `${array}\n${target}\n`;
 }
 
 async function handleFetchProblem(slug) {
     try {
+        const workspaceRoot = getWorkspaceRoot();
+        const workDir = path.join(workspaceRoot, 'stress tester');
         const isInteger = /^\d+$/.test(slug);
-        const problemTitle = isInteger 
+        const problemTitle = isInteger
             ? await fetchProblemById(Number(slug))
             : slug;
 
@@ -40,15 +46,13 @@ async function handleFetchProblem(slug) {
 
         const q = await fetchProblemByName(problemTitle);
         const cppSnippet = q.codeSnippets?.find(s => s.langSlug === 'cpp')?.code;
-        
         if (!cppSnippet) throw new Error('No C++ solution snippet found');
-        
+
         // Create stress tester directory if needed
-        const workDir = path.join(__dirname, '..', '..', 'stress tester');
         if (!fs.existsSync(workDir)) {
             fs.mkdirSync(workDir, { recursive: true });
         }
-        
+
         // Save sample test cases
         const samples = extractSamples(q.content);
         if (samples.length > 0) {
@@ -59,36 +63,23 @@ async function handleFetchProblem(slug) {
         } else {
             throw new Error('No sample test cases found');
         }
-        
+
         // Merge solution snippet with template
         const templatePath = path.join(workDir, 'template.cpp');
         let templateContent = fs.existsSync(templatePath)
             ? fs.readFileSync(templatePath, 'utf8')
-            : `#include <bits/stdc++.h>
-using namespace std;
-
-// $SOLUTION_PLACEHOLDER
-
-int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-    
-    // Your code here
-    
-    return 0;
-}`;
+            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
 
         templateContent = templateContent.replace(
-            '// $SOLUTION_PLACEHOLDER', 
+            '// $SOLUTION_PLACEHOLDER',
             cppSnippet
         );
-        
         fs.writeFileSync(path.join(workDir, 'solution.cpp'), templateContent);
 
         // Fetch official solution
-        let isAvailable = await fetchOfficialSolution(problemTitle);
+        let isAvailable = await fetchOfficialSolution(problemTitle, workDir);
         if (!isAvailable) {
-            isAvailable = await fetchGithubSolution(problemTitle);
+            isAvailable = await fetchGithubSolution(problemTitle, workDir);
         }
 
         // Merge official solution into template for official.cpp
@@ -99,19 +90,7 @@ int main() {
                 const officialSnippet = fs.readFileSync(officialPath, 'utf8');
                 let officialTemplate = fs.existsSync(templatePath)
                     ? fs.readFileSync(templatePath, 'utf8')
-                    : `#include <bits/stdc++.h>
-using namespace std;
-
-// $SOLUTION_PLACEHOLDER
-
-int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-    
-    // Your code here
-    
-    return 0;
-}`;
+                    : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
                 officialTemplate = officialTemplate.replace(
                     '// $SOLUTION_PLACEHOLDER',
                     officialSnippet
@@ -124,13 +103,12 @@ int main() {
             );
             fs.writeFileSync(officialPath, '');
         }
-        
+
         // Open solution.cpp in editor
         const solutionPath = path.join(workDir, 'solution.cpp');
         const uri = vscode.Uri.file(solutionPath);
         const doc = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(doc);
-        
     } catch (error) {
         vscode.window.showErrorMessage(`Fetch failed: ${error.message}`);
     }
@@ -138,21 +116,26 @@ int main() {
 
 async function handleFetchAndStress(slug, panel, mode) {
     try {
+        const workspaceRoot = getWorkspaceRoot();
+        const work = path.join(workspaceRoot, 'stress tester');
         const isInteger = /^\d+$/.test(slug);
-        const problemTitle = isInteger 
+        const problemTitle = isInteger
             ? await fetchProblemById(Number(slug))
             : slug;
 
         if (!problemTitle) throw new Error("Problem not found");
 
-        // Use the main 'stress tester' directory instead of a temp directory
-        const work = path.join(__dirname, '..', '..', 'stress tester');
         if (!fs.existsSync(work)) {
             fs.mkdirSync(work, { recursive: true });
         }
-        copyTemplates(work);
-
         // Do NOT overwrite solution.cpp here! Just use the existing file.
+        // Only copy template.cpp if needed
+        const tplDir = path.resolve(__dirname, '..', '..', 'stress tester');
+        const templateSrc = path.join(tplDir, 'template.cpp');
+        const templateDst = path.join(work, 'template.cpp');
+        if (fs.existsSync(templateSrc)) {
+            fs.copyFileSync(templateSrc, templateDst);
+        }
 
         if (mode === 'runSamples') {
             // ONLY COMPILE SOLUTION.CPP FOR SAMPLE TESTS
@@ -160,13 +143,13 @@ async function handleFetchAndStress(slug, panel, mode) {
             // Fetch problem for sample extraction only
             const q = await fetchProblemByName(problemTitle);
             const samples = extractSamples(q.content);
-            
+
             if (!samples.length) throw new Error('No samples found');
-            
+
             for (let i = 0; i < samples.length; i++) {
                 panel.webview.postMessage({ command: 'progress', i: i+1, total: samples.length });
                 const { input, output: expected } = samples[i];
-                
+
                 // Format input to match program's expected format
                 const formattedInput = formatSampleInput(input);
                 fs.writeFileSync(path.join(work, 'input.txt'), formattedInput);
@@ -203,15 +186,15 @@ async function handleFetchAndStress(slug, panel, mode) {
             if (!fs.existsSync(officialPath)) {
                 throw new Error("No official solution available. Please fetch the problem first.");
             }
-            
+
             ['gen.cpp','official.cpp','solution.cpp'].forEach(src => {
                 const exe = path.basename(src, '.cpp');
                 execSync(`g++ -std=c++17 -O2 ${src} -o ${exe}`, { cwd: work });
             });
 
             const cfg = vscode.workspace.getConfiguration();
-            const maxTests = cfg.get('competitiveCompanion.testCount', 50);
-            const toMs = (cfg.get('competitiveCompanion.testTimeout', 2) * 1000);
+            const maxTests = cfg.get('leetcodeStressTester.testCount', 50);
+            const toMs = (cfg.get('leetcodeStressTester.timeLimitMs', 2) * 1000);
             const outDir = work;
 
             let allInput = '';

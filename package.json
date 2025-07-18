@@ -1,36 +1,41 @@
 {
-  "name": "competitive-companion-v2",
-  "displayName": "Competitive Companion: Stress Tester",
-  "description": "In‑editor CP judge results panel with LeetCode stress‑testing",
+  "name": "leetcode-stress-tester",
+  "displayName": "LeetCode Stress Tester",
+  "publisher": "ShubhamNegi04",
+  "description": "In-editor LeetCode judge results panel with C++ stress-testing",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShubhamNegi4/Leetcode-Stress-Tester"
+  },
   "version": "0.1.0",
   "engines": { "vscode": "^1.64.0" },
   "categories": ["Other"],
   "activationEvents": [
-    "onCommand:competitive-companion-v2.showStressTester",
-    "onCommand:competitive-companion-v2.fetchProblem"
+    "onCommand:leetcode-stress-tester.showStressTester",
+    "onCommand:leetcode-stress-tester.fetchProblem"
   ],
   "main": "./src/frontend/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "competitive-companion-v2.showStressTester",
-        "title": "Competitive Companion: Stress Tester"
+        "command": "leetcode-stress-tester.showStressTester",
+        "title": "LeetCode Stress Tester"
       },
       {
-        "command": "competitive-companion-v2.fetchProblem",
+        "command": "leetcode-stress-tester.fetchProblem",
         "title": "Fetch LeetCode Problem"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "Competitive Companion Settings",
+      "title": "LeetCode Stress Tester Settings",
       "properties": {
-        "competitiveCompanion.testCount": {
+        "leetcodeStressTester.testCount": {
           "type": "number",
           "default": 100,
           "description": "Number of random tests to generate"
         },
-        "competitiveCompanion.timeLimitMs": {
+        "leetcodeStressTester.timeLimitMs": {
           "type": "number",
           "default": 1000,
           "description": "Per-test time limit in milliseconds"
