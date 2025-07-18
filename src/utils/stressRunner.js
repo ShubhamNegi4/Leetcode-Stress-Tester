@@ -53,10 +53,10 @@ async function handleFetchProblem(slug) {
             fs.mkdirSync(workDir, { recursive: true });
         }
 
-        // Save sample test cases
+        // Save all sample test cases to input.txt, separated by blank lines
         const samples = extractSamples(q.content);
         if (samples.length > 0) {
-            const sampleContent = samples.map(s => s.input).join('\n');
+            const sampleContent = samples.map(s => s.input.trim()).join('\n\n');
             fs.writeFileSync(path.join(workDir, 'input.txt'), sampleContent);
         } else if (q.sampleTestCase) {
             fs.writeFileSync(path.join(workDir, 'input.txt'), q.sampleTestCase);
@@ -64,12 +64,22 @@ async function handleFetchProblem(slug) {
             throw new Error('No sample test cases found');
         }
 
-        // Merge solution snippet with template
-        const templatePath = path.join(workDir, 'template.cpp');
-        let templateContent = fs.existsSync(templatePath)
-            ? fs.readFileSync(templatePath, 'utf8')
-            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
+        // Always copy template.cpp and gen.cpp if not present
+        const templateSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'template.cpp');
+        const templateDst = path.join(workDir, 'template.cpp');
+        if (fs.existsSync(templateSrc) && !fs.existsSync(templateDst)) {
+            fs.copyFileSync(templateSrc, templateDst);
+        }
+        const genSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'gen.cpp');
+        const genDst = path.join(workDir, 'gen.cpp');
+        if (fs.existsSync(genSrc) && !fs.existsSync(genDst)) {
+            fs.copyFileSync(genSrc, genDst);
+        }
 
+        // Use the full template if present for solution.cpp
+        let templateContent = fs.existsSync(templateDst)
+            ? fs.readFileSync(templateDst, 'utf8')
+            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
         templateContent = templateContent.replace(
             '// $SOLUTION_PLACEHOLDER',
             cppSnippet
@@ -82,14 +92,13 @@ async function handleFetchProblem(slug) {
             isAvailable = await fetchGithubSolution(problemTitle, workDir);
         }
 
-        // Merge official solution into template for official.cpp
+        // Use the full template if present for official.cpp
         const officialPath = path.join(workDir, 'official.cpp');
         if (isAvailable) {
-            // The fetchOfficialSolution or fetchGithubSolution should have created the official.cpp file
             if (fs.existsSync(officialPath)) {
                 const officialSnippet = fs.readFileSync(officialPath, 'utf8');
-                let officialTemplate = fs.existsSync(templatePath)
-                    ? fs.readFileSync(templatePath, 'utf8')
+                let officialTemplate = fs.existsSync(templateDst)
+                    ? fs.readFileSync(templateDst, 'utf8')
                     : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
                 officialTemplate = officialTemplate.replace(
                     '// $SOLUTION_PLACEHOLDER',
@@ -138,6 +147,12 @@ async function handleFetchAndStress(slug, panel, mode) {
         }
 
         if (mode === 'runSamples') {
+            // Ensure gen.cpp exists for user to edit before running stress
+            const genSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'gen.cpp');
+            const genDst = path.join(work, 'gen.cpp');
+            if (fs.existsSync(genSrc) && !fs.existsSync(genDst)) {
+                fs.copyFileSync(genSrc, genDst);
+            }
             // ONLY COMPILE SOLUTION.CPP FOR SAMPLE TESTS
             execSync('g++ -std=c++17 -O2 solution.cpp -o solution', { cwd: work });
             // Fetch problem for sample extraction only
