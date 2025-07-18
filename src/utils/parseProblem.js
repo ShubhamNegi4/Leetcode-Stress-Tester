@@ -1,36 +1,44 @@
 const cheerio = require('cheerio');
 
+/**
+ * extractSamples - Parse LeetCode HTML content to pull out Input/Output samples
+ * Works on Windows (CRLF), Linux & macOS (LF) by normalizing line endings
+ * @param {string} htmlContent - full HTML of a LeetCode problem page
+ * @returns {Array<{input: string, output: string}>} - array of sample objects
+ */
 function extractSamples(htmlContent) {
-    const $ = cheerio.load(htmlContent);
+    // Normalize all CRLF to LF for consistent regex matching
+    const normalized = htmlContent.replace(/\r\n/g, '\n');
+    const $ = cheerio.load(normalized);
     const samples = [];
-    
-    // First try: Standard LeetCode sample format
+
     $('pre').each((_, pre) => {
-        const text = $(pre).text();
-        if (!text) return;
-        
-        // Try to find input and output markers
-        const inputMatch = text.match(/Input\s*:\s*([\s\S]*?)(?=Output\s*:)/i);
-        const outputMatch = text.match(/Output\s*:\s*([\s\S]*?)(?=Explanation\s*:|$)/i);
-        
+        // Get text block and ensure LF endings
+        const block = $(pre).text().replace(/\r\n/g, '\n');
+
+        // Attempt to capture `Input:` ... `Output:` format (support both ':' and '：')
+        const inputMatch = block.match(/Input\s*[:：]\s*([\s\S]*?)(?=Output\s*[:：])/i);
+        const outputMatch = block.match(/Output\s*[:：]\s*([\s\S]*?)(?=(?:Explanation|Constraints|$)\b)/i);
+
         if (inputMatch && outputMatch) {
             samples.push({
                 input: inputMatch[1].trim() + '\n',
                 output: outputMatch[1].trim() + '\n'
             });
         } else {
-            // Fallback: Split by lines
-            const lines = text.trim().split('\n');
-            if (lines.length >= 2) {
+            // Fallback: Split by lines, take pairs
+            const lines = block.trim().split('\n').map(l => l.trim()).filter(Boolean);
+            for (let i = 0; i + 1 < lines.length; i += 2) {
                 samples.push({
-                    input: lines[0].trim() + '\n',
-                    output: lines[1].trim() + '\n'
+                    input: lines[i] + '\n',
+                    output: lines[i + 1] + '\n'
                 });
             }
         }
     });
-    
-    return samples;
+
+    // Remove empty samples
+    return samples.filter(s => s.input.trim() && s.output.trim());
 }
 
 module.exports = { extractSamples };

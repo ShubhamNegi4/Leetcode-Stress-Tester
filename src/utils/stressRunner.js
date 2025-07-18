@@ -184,6 +184,11 @@ async function handleFetchAndStress(slug, panel, mode) {
         const exeExt = isWindows ? '.exe' : '';
         const compileCmd = 'g++ -std=c++17 -O2 -pipe -Wall -Wextra -Wshadow -Wconversion -Wpedantic -march=native';
 
+        // Helper to get execution command
+        function execCmd(name) {
+            return isWindows ? `${name}${exeExt}` : `./${name}`;
+        }
+
         if (mode === 'runSamples') {
             // Ensure gen.cpp exists for user to edit before running stress
             const genSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'gen.cpp');
@@ -205,7 +210,6 @@ async function handleFetchAndStress(slug, panel, mode) {
                     if (parts.length === 2) {
                         samples.push({ input: parts[0].trim(), output: parts[1].trim() });
                     } else {
-                        // If not in correct format, skip or show error
                         return panel.webview.postMessage({
                             command: 'error',
                             error: 'Each sample in input.txt must have input, a line with --- and expected output, separated by blank lines.'
@@ -235,7 +239,8 @@ async function handleFetchAndStress(slug, panel, mode) {
                 const tempInputFile = path.join(work, 'input_sample_tmp.txt');
                 fs.writeFileSync(tempInputFile, formattedInput);
 
-                const solRaw = execSync('./solution < input_sample_tmp.txt', { cwd: work }).toString().trim();
+                const runSolution = execCmd('solution');
+                const solRaw = execSync(`${runSolution} < input_sample_tmp.txt`, { cwd: work }).toString().trim();
                 const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
 
                 // Delete the temp input file after use
@@ -273,8 +278,8 @@ async function handleFetchAndStress(slug, panel, mode) {
             }
 
             ['gen.cpp','brute.cpp','solution.cpp'].forEach(src => {
-                const exe = path.basename(src, '.cpp');
-                execSync(`${compileCmd} ${src} -o ${exe}${exeExt}`, { cwd: work });
+                const exeName = path.basename(src, '.cpp');
+                execSync(`${compileCmd} ${src} -o ${exeName}${exeExt}`, { cwd: work });
             });
 
             const cfg = vscode.workspace.getConfiguration();
@@ -288,22 +293,26 @@ async function handleFetchAndStress(slug, panel, mode) {
 
             let stressTempInput = path.join(work, 'input_stress_tmp.txt');
 
+            const genCmd = execCmd('gen');
+            const solCmd = execCmd('solution');
+            const bruteCmd = execCmd('brute');
+
             for (let i = 1; i <= maxTests; i++) {
                 panel.webview.postMessage({ command: 'progress', i, total: maxTests });
 
-                execSync(`./gen > input_stress_tmp.txt`, { cwd: work });
+                execSync(`${genCmd} > input_stress_tmp.txt`, { cwd: work });
                 const inp = fs.readFileSync(stressTempInput, 'utf8');
 
                 let solOut;
                 try {
-                    solOut = execSync('./solution < input_stress_tmp.txt', { cwd: work, timeout: toMs }).toString().trim();
+                    solOut = execSync(`${solCmd} < input_stress_tmp.txt`, { cwd: work, timeout: toMs }).toString().trim();
                 } catch (err) {
                     solOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
                 }
 
                 let bruteOut;
                 try {
-                    bruteOut = execSync('./brute < input_stress_tmp.txt', { cwd: work, timeout: toMs }).toString().trim();
+                    bruteOut = execSync(`${bruteCmd} < input_stress_tmp.txt`, { cwd: work, timeout: toMs }).toString().trim();
                 } catch (err) {
                     bruteOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
                 }
