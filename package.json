@@ -8,11 +8,14 @@
     "url": "https://github.com/ShubhamNegi4/Leetcode-Stress-Tester"
   },
   "version": "0.1.1",
-  "engines": { "vscode": "^1.64.0" },
-  "categories": ["Other"],
+  "engines": {
+    "vscode": "^1.64.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
-    "onCommand:leetcode-stress-tester.showStressTester",
-    "onCommand:leetcode-stress-tester.fetchProblem"
+    "onCommand:leetcode-stress-tester.showStressTester"
   ],
   "main": "./src/frontend/extension.js",
   "contributes": {
@@ -44,8 +47,8 @@
     "test": "echo 'No tests defined'"
   },
   "dependencies": {
-    "node-fetch": "^2.7.0",
-    "cheerio": "^1.1.0"
+    "cheerio": "^1.1.0",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",

@@ -7,7 +7,7 @@ TO=${2:-2}
 # compile/optimize each time so you can't accidentally run stale code
 g++ gen.cpp        -std=c++17 -O2 -o gen
 g++ solution.cpp   -std=c++17 -O2 -o solution
-g++ official.cpp      -std=c++17 -O2 -o official
+g++ brute.cpp      -std=c++17 -O2 -o brute
 
 count=0
 while (( count < MAX )); do
@@ -24,11 +24,11 @@ while (( count < MAX )); do
     exit 1
   fi
 
-  # run official with timeout
-  if ! timeout ${TO}s ./official < input.txt > out2.txt; then
-    echo "❌ Timeout on official at case $count"
+  # run brute with timeout
+  if ! timeout ${TO}s ./brute < input.txt > out2.txt; then
+    echo "❌ Timeout on brute at case $count"
     cp input.txt  failed_input.txt
-    cp out2.txt   failed_official.txt
+    cp out2.txt   failed_brute.txt
     exit 1
   fi
 
@@ -42,13 +42,13 @@ while (( count < MAX )); do
     echo "=== YOUR OUTPUT ==="
     cat out1.txt
     echo
-    echo "=== official OUTPUT ==="
+    echo "=== brute OUTPUT ==="
     cat out2.txt
 
     # save files for external inspection
     cp input.txt  failed_input.txt
     cp out1.txt   failed_solution.txt
-    cp out2.txt   failed_official.txt
+    cp out2.txt   failed_brute.txt
     exit 1
   fi
 

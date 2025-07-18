@@ -152,7 +152,7 @@ async function fetchOfficialSolution(slug, targetDir) {
     
     if (!cppSolution) return false;
     
-    const filePath = path.join(targetDir, 'official.cpp');
+    const filePath = path.join(targetDir, 'brute.cpp');
     fs.writeFileSync(filePath, cppSolution);
     return true;
 }
@@ -164,7 +164,7 @@ async function fetchGithubSolution(slug, targetDir) {
     if (!res.ok) return false;
     
     const codeCPP = await res.text();
-    const filePath = path.join(targetDir, 'official.cpp');
+    const filePath = path.join(targetDir, 'brute.cpp');
     fs.writeFileSync(filePath, codeCPP);
     return true;
 }

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const vscode = require('vscode');
+const https = require('https');
 
 const {
     fetchProblemByName,
@@ -33,6 +34,26 @@ function formatSampleInput(input) {
     return `${array}\n${target}\n`;
 }
 
+async function ensureJsonHpp(workDir) {
+    const jsonPath = path.join(workDir, 'json.hpp');
+    if (fs.existsSync(jsonPath)) return;
+    const url = 'https://github.com/nlohmann/json/releases/latest/download/json.hpp';
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(jsonPath);
+        https.get(url, response => {
+            if (response.statusCode !== 200) {
+                fs.unlinkSync(jsonPath);
+                return reject(new Error('Failed to download json.hpp'));
+            }
+            response.pipe(file);
+            file.on('finish', () => file.close(resolve));
+        }).on('error', err => {
+            fs.unlinkSync(jsonPath);
+            reject(err);
+        });
+    });
+}
+
 async function handleFetchProblem(slug) {
     try {
         const workspaceRoot = getWorkspaceRoot();
@@ -53,10 +74,17 @@ async function handleFetchProblem(slug) {
             fs.mkdirSync(workDir, { recursive: true });
         }
 
+        // Ensure json.hpp exists
+        const jsonSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'json.hpp');
+        const jsonDst = path.join(workDir, 'json.hpp');
+        if (fs.existsSync(jsonSrc) && !fs.existsSync(jsonDst)) {
+            fs.copyFileSync(jsonSrc, jsonDst);
+        }
+
         // Save all sample test cases to input.txt, separated by blank lines
         const samples = extractSamples(q.content);
         if (samples.length > 0) {
-            const sampleContent = samples.map(s => s.input.trim()).join('\n\n');
+            const sampleContent = samples.map(s => `${s.input.trim()}\n---\n${s.output.trim()}`).join('\n\n');
             fs.writeFileSync(path.join(workDir, 'input.txt'), sampleContent);
         } else if (q.sampleTestCase) {
             fs.writeFileSync(path.join(workDir, 'input.txt'), q.sampleTestCase);
@@ -80,11 +108,18 @@ async function handleFetchProblem(slug) {
         let templateContent = fs.existsSync(templateDst)
             ? fs.readFileSync(templateDst, 'utf8')
             : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
-        templateContent = templateContent.replace(
-            '// $SOLUTION_PLACEHOLDER',
-            cppSnippet
-        );
-        fs.writeFileSync(path.join(workDir, 'solution.cpp'), templateContent);
+
+        // Parse function name and params from cppSnippet (LeetCode user solution)
+        let funcMatch = cppSnippet.match(/([a-zA-Z0-9_]+)\s*\(([^)]*)\)/);
+        let funcName = 'FUNCTION_NAME';
+        let funcParams = 'PARAMS';
+        if (funcMatch) {
+            funcName = funcMatch[1];
+            funcParams = funcMatch[2].split(',').map(s => s.trim().split(' ').pop().replace(/&|\*/g, '')).filter(Boolean).join(', ');
+        }
+        let solutionContent = templateContent.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${funcName}(${funcParams})`);
+        solutionContent = solutionContent.replace('// $LEETCODE_FUNCTION$', cppSnippet);
+        fs.writeFileSync(path.join(workDir, 'solution.cpp'), solutionContent);
 
         // Fetch official solution
         let isAvailable = await fetchOfficialSolution(problemTitle, workDir);
@@ -92,32 +127,30 @@ async function handleFetchProblem(slug) {
             isAvailable = await fetchGithubSolution(problemTitle, workDir);
         }
 
-        // Use the full template if present for official.cpp
-        const officialPath = path.join(workDir, 'official.cpp');
-        if (isAvailable) {
-            if (fs.existsSync(officialPath)) {
-                const officialSnippet = fs.readFileSync(officialPath, 'utf8');
-                let officialTemplate = fs.existsSync(templateDst)
-                    ? fs.readFileSync(templateDst, 'utf8')
-                    : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
-                officialTemplate = officialTemplate.replace(
-                    '// $SOLUTION_PLACEHOLDER',
-                    officialSnippet
-                );
-                fs.writeFileSync(officialPath, officialTemplate);
+        // Always use the template for brute.cpp, inserting the official solution if available
+        const brutePath = path.join(workDir, 'brute.cpp');
+        let bruteTemplate = fs.existsSync(templateDst)
+            ? fs.readFileSync(templateDst, 'utf8')
+            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
+        if (isAvailable && fs.existsSync(brutePath)) {
+            const bruteSnippet = fs.readFileSync(brutePath, 'utf8');
+            let bFuncMatch = bruteSnippet.match(/([a-zA-Z0-9_]+)\s*\(([^)]*)\)/);
+            let bFuncName = 'FUNCTION_NAME';
+            let bFuncParams = 'PARAMS';
+            if (bFuncMatch) {
+                bFuncName = bFuncMatch[1];
+                bFuncParams = bFuncMatch[2].split(',').map(s => s.trim().split(' ').pop().replace(/&|\*/g, '')).filter(Boolean).join(', ');
             }
+            let bruteContent = bruteTemplate.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${bFuncName}(${bFuncParams})`);
+            bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', bruteSnippet);
+            fs.writeFileSync(brutePath, bruteContent);
         } else {
-            vscode.window.showWarningMessage(
-                'No official solution found. Using empty official.cpp'
-            );
-            fs.writeFileSync(officialPath, '');
+            // No official solution available
+            fs.writeFileSync(brutePath, '// No official solution available for this problem.\n');
         }
 
         // Open solution.cpp in editor
-        const solutionPath = path.join(workDir, 'solution.cpp');
-        const uri = vscode.Uri.file(solutionPath);
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc);
+        // (No longer auto-opening solution.cpp to avoid focus issues)
     } catch (error) {
         vscode.window.showErrorMessage(`Fetch failed: ${error.message}`);
     }
@@ -146,6 +179,11 @@ async function handleFetchAndStress(slug, panel, mode) {
             fs.copyFileSync(templateSrc, templateDst);
         }
 
+        // Platform detection for cross-platform binary extension
+        const isWindows = process.platform === 'win32';
+        const exeExt = isWindows ? '.exe' : '';
+        const compileCmd = 'g++ -std=c++17 -O2 -pipe -Wall -Wextra -Wshadow -Wconversion -Wpedantic -march=native';
+
         if (mode === 'runSamples') {
             // Ensure gen.cpp exists for user to edit before running stress
             const genSrc = path.resolve(__dirname, '..', '..', 'stress tester', 'gen.cpp');
@@ -154,12 +192,39 @@ async function handleFetchAndStress(slug, panel, mode) {
                 fs.copyFileSync(genSrc, genDst);
             }
             // ONLY COMPILE SOLUTION.CPP FOR SAMPLE TESTS
-            execSync('g++ -std=c++17 -O2 solution.cpp -o solution', { cwd: work });
-            // Fetch problem for sample extraction only
-            const q = await fetchProblemByName(problemTitle);
-            const samples = extractSamples(q.content);
+            execSync(`${compileCmd} solution.cpp -o solution${exeExt}`, { cwd: work });
+            // Always read the latest input.txt for samples
+            const inputTxtPath = path.join(work, 'input.txt');
+            let samples = [];
+            if (fs.existsSync(inputTxtPath)) {
+                const fileContent = fs.readFileSync(inputTxtPath, 'utf8');
+                // Split samples by blank lines
+                const rawSamples = fileContent.split(/\n\s*\n/).filter(Boolean);
+                for (const raw of rawSamples) {
+                    const parts = raw.split(/\n---\n/);
+                    if (parts.length === 2) {
+                        samples.push({ input: parts[0].trim(), output: parts[1].trim() });
+                    } else {
+                        // If not in correct format, skip or show error
+                        return panel.webview.postMessage({
+                            command: 'error',
+                            error: 'Each sample in input.txt must have input, a line with --- and expected output, separated by blank lines.'
+                        });
+                    }
+                }
+            } else {
+                return panel.webview.postMessage({
+                    command: 'error',
+                    error: 'input.txt not found. Please add your samples to input.txt.'
+                });
+            }
 
-            if (!samples.length) throw new Error('No samples found');
+            if (!samples.length) {
+                return panel.webview.postMessage({
+                    command: 'error',
+                    error: 'No valid samples found in input.txt.'
+                });
+            }
 
             for (let i = 0; i < samples.length; i++) {
                 panel.webview.postMessage({ command: 'progress', i: i+1, total: samples.length });
@@ -167,10 +232,14 @@ async function handleFetchAndStress(slug, panel, mode) {
 
                 // Format input to match program's expected format
                 const formattedInput = formatSampleInput(input);
-                fs.writeFileSync(path.join(work, 'input.txt'), formattedInput);
+                const tempInputFile = path.join(work, 'input_sample_tmp.txt');
+                fs.writeFileSync(tempInputFile, formattedInput);
 
-                const solRaw = execSync('./solution < input.txt', { cwd: work }).toString().trim();
+                const solRaw = execSync('./solution < input_sample_tmp.txt', { cwd: work }).toString().trim();
                 const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
+
+                // Delete the temp input file after use
+                try { fs.unlinkSync(tempInputFile); } catch (e) { /* ignore */ }
 
                 if (!ok) {
                     return panel.webview.postMessage({
@@ -190,21 +259,22 @@ async function handleFetchAndStress(slug, panel, mode) {
                     solution: solRaw
                 });
             }
-
+            // After all samples, ensure temp file is deleted
+            try { fs.unlinkSync(path.join(work, 'input_sample_tmp.txt')); } catch (e) { /* ignore */ }
             return panel.webview.postMessage({ command: 'done' });
         }
 
         if (mode === 'runStress') {
             // For stress tests, compile all files
-            // Check if official.cpp exists (should have been created during fetch)
-            const officialPath = path.join(work, 'official.cpp');
-            if (!fs.existsSync(officialPath)) {
-                throw new Error("No official solution available. Please fetch the problem first.");
+            // Check if brute.cpp exists (should have been created during fetch)
+            const brutePath = path.join(work, 'brute.cpp');
+            if (!fs.existsSync(brutePath)) {
+                throw new Error("No brute solution available. Please fetch the problem first.");
             }
 
-            ['gen.cpp','official.cpp','solution.cpp'].forEach(src => {
+            ['gen.cpp','brute.cpp','solution.cpp'].forEach(src => {
                 const exe = path.basename(src, '.cpp');
-                execSync(`g++ -std=c++17 -O2 ${src} -o ${exe}`, { cwd: work });
+                execSync(`${compileCmd} ${src} -o ${exe}${exeExt}`, { cwd: work });
             });
 
             const cfg = vscode.workspace.getConfiguration();
@@ -214,42 +284,44 @@ async function handleFetchAndStress(slug, panel, mode) {
 
             let allInput = '';
             let allSolOut = '';
-            let allofficialOut = '';
+            let allBruteOut = '';
+
+            let stressTempInput = path.join(work, 'input_stress_tmp.txt');
 
             for (let i = 1; i <= maxTests; i++) {
                 panel.webview.postMessage({ command: 'progress', i, total: maxTests });
 
-                execSync('./gen > input.txt', { cwd: work });
-                const inp = fs.readFileSync(path.join(work, 'input.txt'), 'utf8');
+                execSync(`./gen > input_stress_tmp.txt`, { cwd: work });
+                const inp = fs.readFileSync(stressTempInput, 'utf8');
 
                 let solOut;
                 try {
-                    solOut = execSync('./solution < input.txt', { cwd: work, timeout: toMs }).toString().trim();
+                    solOut = execSync('./solution < input_stress_tmp.txt', { cwd: work, timeout: toMs }).toString().trim();
                 } catch (err) {
                     solOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
                 }
 
-                let bruOut;
+                let bruteOut;
                 try {
-                    bruOut = execSync('./official < input.txt', { cwd: work, timeout: toMs }).toString().trim();
+                    bruteOut = execSync('./brute < input_stress_tmp.txt', { cwd: work, timeout: toMs }).toString().trim();
                 } catch (err) {
-                    bruOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
+                    bruteOut = `<<ERROR: ${err.killed ? 'timeout' : err.message}>>`;
                 }
 
                 allInput += `=== Test #${i} ===\n${inp}\n\n`;
                 allSolOut += `=== Test #${i} ===\n${solOut}\n\n`;
-                allofficialOut += `=== Test #${i} ===\n${bruOut}\n\n`;
+                allBruteOut += `=== Test #${i} ===\n${bruteOut}\n\n`;
 
-                if (solOut !== bruOut) {
+                if (solOut !== bruteOut) {
                     fs.writeFileSync(path.join(outDir, 'all_input.txt'), allInput);
-                    fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
-                    fs.writeFileSync(path.join(outDir, 'all_official.txt'), allofficialOut);
-
+                    fs.writeFileSync(path.join(outDir, 'solution_output.txt'), allSolOut);
+                    fs.writeFileSync(path.join(outDir, 'brute_output.txt'), allBruteOut);
+                    // Do NOT append to input.txt anymore
                     return panel.webview.postMessage({
                         command: 'fail',
                         caseIndex: i,
                         input: inp,
-                        expected: bruOut,
+                        expected: bruteOut,
                         solution: solOut
                     });
                 }
@@ -258,8 +330,10 @@ async function handleFetchAndStress(slug, panel, mode) {
             }
 
             fs.writeFileSync(path.join(outDir, 'all_input.txt'), allInput);
-            fs.writeFileSync(path.join(outDir, 'all_solution.txt'), allSolOut);
-            fs.writeFileSync(path.join(outDir, 'all_official.txt'), allofficialOut);
+            fs.writeFileSync(path.join(outDir, 'solution_output.txt'), allSolOut);
+            fs.writeFileSync(path.join(outDir, 'brute_output.txt'), allBruteOut);
+            // After all stress tests, ensure temp file is deleted
+            try { fs.unlinkSync(stressTempInput); } catch (e) { /* ignore */ }
 
             return panel.webview.postMessage({ command: 'done' });
         }
