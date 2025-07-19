@@ -8,7 +8,6 @@ function mkTempDir(prefix = 'lc-stress-') {
 
 function copyTemplates(dest) {
     const tplDir = path.resolve(__dirname, '..', '..', 'stress tester');
-    console.log('Template dir is:', tplDir);
 
     // Copy only essential files
     ['solution.cpp', 'template.cpp'].forEach(f => {

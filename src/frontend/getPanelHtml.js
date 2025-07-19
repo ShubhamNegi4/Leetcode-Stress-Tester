@@ -73,26 +73,47 @@ function getPanelHtml() {
             loaderWrapper.style.marginTop = '8px';
             status.parentNode.insertBefore(loaderWrapper, status.nextSibling);
         }
-        let loader = document.getElementById('status-loader');
-        if (!loader) {
-            loader = document.createElement('span');
-            loader.id = 'status-loader';
-            loader.style.display = 'none';
-            loader.innerHTML = '<span style="display:inline-block;width:24px;height:24px;border:3px solid #64748b;border-top:3px solid #cbd5e1;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;"></span>';
-            loaderWrapper.appendChild(loader);
+        // Linear progress bar
+        let progressBar = document.getElementById('status-progress-bar');
+        if (!progressBar) {
+            progressBar = document.createElement('div');
+            progressBar.id = 'status-progress-bar';
+            progressBar.style.display = 'none';
+            progressBar.style.width = '100%';
+            progressBar.style.height = '8px';
+            progressBar.style.background = 'var(--vscode-editorWidget-background, #e5e7eb)';
+            progressBar.style.borderRadius = '4px';
+            progressBar.style.overflow = 'hidden';
+            progressBar.innerHTML = '<div id="status-progress-bar-inner" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#22d3ee);transition:width 0.2s;"></div>';
+            loaderWrapper.appendChild(progressBar);
         }
-        const style = document.createElement('style');
-        style.innerHTML = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
-        document.head.appendChild(style);
-        // Remove the log console from the UI
+        function showProgressBar(current, total) {
+            progressBar.style.display = 'block';
+            const inner = document.getElementById('status-progress-bar-inner');
+            if (inner) {
+                const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+                inner.style.width = percent + '%';
+            }
+        }
+        function hideProgressBar() {
+            progressBar.style.display = 'none';
+            const inner = document.getElementById('status-progress-bar-inner');
+            if (inner) inner.style.width = '0%';
+        }
         const log = document.getElementById('log');
         if (log) log.remove();
+        let errorActive = false;
         function showStatus(message, type = 'info', showLoader = false) {
             status.textContent = message;
             status.className = 'status ' + type;
             status.style.display = 'block';
-            let loader = document.getElementById('status-loader');
-            if (loader) loader.style.display = showLoader ? 'inline-block' : 'none';
+            if (!showLoader) hideProgressBar();
+            if (type === 'error' && message !== 'Test case failed.') {
+                sampleContainer.innerHTML = '';
+                errorActive = true;
+            } else if (type === 'info' || type === 'success') {
+                errorActive = false;
+            }
         }
         function getProblemId() {
             const problemId = problemInput.value.trim();
@@ -114,9 +135,7 @@ function getPanelHtml() {
             const problemId = getProblemId();
             if (problemId) {
                 saveProblemId(problemId);
-                // Clear previous sample cards
                 sampleContainer.innerHTML = '';
-                // Clear status message
                 status.textContent = '';
                 status.style.display = 'none';
                 showStatus('Running sample tests...', 'info', true);
@@ -127,9 +146,7 @@ function getPanelHtml() {
             const problemId = getProblemId();
             if (problemId) {
                 saveProblemId(problemId);
-                // Clear previous sample cards
                 sampleContainer.innerHTML = '';
-                // Clear status message
                 status.textContent = '';
                 status.style.display = 'none';
                 showStatus('Running stress tests...', 'info', true);
@@ -163,17 +180,23 @@ function getPanelHtml() {
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.command) {
+                case 'progress':
+                    showProgressBar(message.i, message.total);
+                    break;
                 case 'status':
                     showStatus(message.text, message.type || 'info', false);
                     break;
                 case 'sample':
-                    showSampleCard(message.caseIndex, message.input, message.expected, message.solution, message.passed);
+                    if (!errorActive) showSampleCard(message.caseIndex, message.input, message.expected, message.solution, message.passed);
                     break;
                 case 'fail':
-                    showSampleCard(message.caseIndex, message.input, message.expected, message.solution, false, true);
-                    showStatus('Test case failed.', 'error', false);
+                    if (!errorActive) {
+                        showSampleCard(message.caseIndex, message.input, message.expected, message.solution, false, true);
+                        showStatus('Test case failed.', 'error', false);
+                    }
                     break;
                 case 'done':
+                    hideProgressBar();
                     showStatus('All tests passed!', 'success', false);
                     break;
             }

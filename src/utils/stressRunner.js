@@ -12,6 +12,7 @@ const {
 } = require('./fetch.js');
 
 const { extractSamples } = require('./parseProblem.js');
+const { CANONICAL_TEMPLATE } = require('./canonicalTemplate');
 
 // --- UTILITY FUNCTIONS ---
 
@@ -40,7 +41,6 @@ function formatSampleInput(input) {
     }
     // If we can't parse, log a warning and return the original
     if (!arrMatch || !targetMatch) {
-        console.warn('Could not parse sample input, using raw:', input);
         return input.trim();
     }
     return `${numArr}\n${target}`;
@@ -62,7 +62,7 @@ function getMTime(file) {
 function loadSamplesFromFile(workDir) {
     const inputTxtPath = path.join(workDir, 'textIO', 'input.txt');
     if (!fs.existsSync(inputTxtPath)) {
-        throw new Error('input.txt not found. Please add your samples to textIO/input.txt.');
+        throw new Error('input.txt not found. Please add your samples to textIO/input.txt or fetch the problem again.');
     }
 
     const fileContent = fs.readFileSync(inputTxtPath, 'utf8');
@@ -98,26 +98,25 @@ function compileIfNeeded(options) {
         return `Source file not found: ${src}`;
     }
 
-    if (!fs.existsSync(exePath) || getMTime(srcPath) > getMTime(exePath)) {
-        const cmd = `${compiler} ${flags} "${srcPath}" -o "${exePath}"`;
-        try {
-            const result = spawnSync(cmd, { cwd, shell: true, encoding: 'utf8' });
-            if (result.status !== 0) {
-                // Extract the first error line and message
-                const lines = (result.stderr || result.stdout || '').split('\n').filter(Boolean);
-                let errorLine = lines.find(l => l.includes(src));
-                if (!errorLine && lines.length > 0) errorLine = lines[0];
-                let concise = errorLine ? errorLine.trim() : 'Compilation failed.';
-                // Try to extract file, line, and error reason
-                const match = concise.match(/([^:]+):(\d+):(\d+):\s*error: (.*)/);
-                if (match) {
-                    concise = `${match[1]}:${match[2]}:${match[3]}: ${match[4]}`;
-                }
-                return concise;
+    // Always recompile, regardless of timestamps
+    const cmd = `${compiler} ${flags} "${srcPath}" -o "${exePath}"`;
+    try {
+        const result = spawnSync(cmd, { cwd, shell: true, encoding: 'utf8' });
+        if (result.status !== 0) {
+            // Extract the first error line and message
+            const lines = (result.stderr || result.stdout || '').split('\n').filter(Boolean);
+            let errorLine = lines.find(l => l.includes(src));
+            if (!errorLine && lines.length > 0) errorLine = lines[0];
+            let concise = errorLine ? errorLine.trim() : 'Compilation failed.';
+            // Try to extract file, line, and error reason
+            const match = concise.match(/([^:]+):(\d+):(\d+):\s*error: (.*)/);
+            if (match) {
+                concise = `${match[1]}:${match[2]}:${match[3]}: ${match[4]}`;
             }
-        } catch (e) {
-            return `Compilation command failed for ${src}: ${e.message}`;
+            return concise;
         }
+    } catch (e) {
+        return `Compilation command failed for ${src}: ${e.message}`;
     }
     return null; // No error
 }
@@ -188,13 +187,30 @@ function compileSources(workDir, mode, panel) {
 
 // --- CORE LOGIC: TEST RUNNERS ---
 
+function getOutput(proc, name) {
+    if (proc.error && proc.error.code !== 'ETIMEDOUT') return { error: 'exec', message: `<<ERROR: ${proc.error.message}>>` };
+    if (proc.status !== 0) {
+        let reason = 'Runtime error';
+        if (proc.stderr) {
+            reason = proc.stderr.split('\n').find(line => line.trim()) || 'Runtime error';
+        }
+        return { error: 'runtime', message: `❌ ${name}.cpp: ${reason}` };
+    }
+    return { error: null, output: proc.stdout.trim() };
+}
+
 /**
  * Runs sample tests in parallel using a worker pool.
  * Samples are loaded from textIO/input.txt but passed in-memory to avoid disk I/O during testing.
  */
 async function runSampleTests(workDir, exeExt, panel) {
-    const samples = loadSamplesFromFile(workDir);
-    console.log('Starting runSampleTests, samples:', samples.length);
+    let samples;
+    try {
+        samples = loadSamplesFromFile(workDir);
+    } catch (err) {
+        panel.webview.postMessage({ command: 'status', text: err.message, type: 'error' });
+        return;
+    }
     if (!samples.length) {
         panel.webview.postMessage({ command: 'status', text: 'No valid samples found.', type: 'error' });
         return;
@@ -212,45 +228,20 @@ async function runSampleTests(workDir, exeExt, panel) {
                 return;
             }
 
+            // Always send progress before processing the test case
             panel.webview.postMessage({ command: 'progress', i: i + 1, total: samples.length });
 
             const { input, output: expected } = samples[i];
             const formattedInput = formatSampleInput(input);
-            let solProc;
-            try {
-                solProc = spawnSync(solCmd, { input: formattedInput, encoding: 'utf8', shell: false, timeout: 2000 });
-            } catch (err) {
-                panel.webview.postMessage({ command: 'status', text: 'Error running C++ solution: ' + err.message, type: 'error' });
+            let solProc = spawnSync(solCmd, { input: formattedInput, encoding: 'utf8', shell: false, timeout: 2000 });
+            const solResult = getOutput(solProc, 'solution');
+            if (solResult.error && !failFound) {
                 failFound = true;
+                panel.webview.postMessage({ command: 'status', text: solResult.message, type: 'error' });
                 return;
             }
-            let solRaw;
-            if (solProc.error) {
-                solRaw = `<<ERROR: ${solProc.error.message}>>`;
-                panel.webview.postMessage({ command: 'status', text: solRaw, type: 'error' });
-                failFound = true;
-                return;
-            } else if (solProc.status !== 0) {
-                solRaw = `<<RUNTIME ERROR>>\n${solProc.stderr}`;
-                panel.webview.postMessage({ command: 'status', text: solRaw, type: 'error' });
-                failFound = true;
-                return;
-            } else {
-                solRaw = solProc.stdout.trim();
-                if (!solRaw) solRaw = "<<NO OUTPUT>>";
-            }
-
-            // Debugging: log command, input, and output
-            console.log('Running sample:', {
-                index: i + 1,
-                command: solCmd,
-                input: formattedInput,
-                status: solProc.status,
-                error: solProc.error,
-                stdout: solProc.stdout,
-                stderr: solProc.stderr,
-                solRaw: solRaw
-            });
+            let solRaw = solResult.output;
+            if (!solRaw) solRaw = "<<NO OUTPUT>>";
 
             const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
 
@@ -283,7 +274,6 @@ async function runSampleTests(workDir, exeExt, panel) {
     if (!failFound) {
         panel.webview.postMessage({ command: 'done' });
     }
-    console.log('Finished runSampleTests');
 }
 
 /**
@@ -300,7 +290,16 @@ async function runStressTests(workDir, exeExt, panel) {
     const bruteCmd = path.join(workDir, `brute${exeExt}`);
     
     if (!fs.existsSync(bruteCmd)) {
-        throw new Error("Cannot run stress test: `brute` executable not found. Ensure `brute.cpp` exists and compiles.");
+        panel.webview.postMessage({ command: 'status', text: 'Cannot run stress test: `brute` executable not found. Ensure `brute.cpp` exists and compiles.', type: 'error' });
+        return;
+    }
+    if (!fs.existsSync(genCmd)) {
+        panel.webview.postMessage({ command: 'status', text: 'Cannot run stress test: `gen` executable not found. Ensure `gen.cpp` exists and compiles.', type: 'error' });
+        return;
+    }
+    if (!fs.existsSync(solCmd)) {
+        panel.webview.postMessage({ command: 'status', text: 'Cannot run stress test: `solution` executable not found. Ensure `solution.cpp` exists and compiles.', type: 'error' });
+        return;
     }
 
     let nextTestIndex = 1;
@@ -316,56 +315,57 @@ async function runStressTests(workDir, exeExt, panel) {
                 return;
             }
 
+            // Always send progress before processing the test case
             panel.webview.postMessage({ command: 'progress', i, total: maxTests });
 
             // Generate input
             const genProc = spawnSync(genCmd, { encoding: 'utf8', shell: false });
-            if (genProc.status !== 0) {
-                if (!failFound) {
-                    failFound = true;
-                    panel.webview.postMessage({ command: 'error', error: `Generator failed on test #${i}:\n${genProc.stderr}` });
-                }
+            const genResult = getOutput(genProc, 'gen');
+            if (genResult.error && !failFound) {
+                failFound = true;
+                panel.webview.postMessage({ command: 'status', text: genResult.message, type: 'error' });
                 return;
             }
-            const input = genProc.stdout;
+            const input = genResult.output;
 
             // Run solution and brute force
             const solProc = spawnSync(solCmd, { input, encoding: 'utf8', shell: false, timeout: timeLimit });
             const bruteProc = spawnSync(bruteCmd, { input, encoding: 'utf8', shell: false, timeout: timeLimit });
+            const solResult = getOutput(solProc, 'solution');
+            const bruteResult = getOutput(bruteProc, 'brute');
 
-            const getOutput = (proc, name) => {
-                if (proc.error?.code === 'ETIMEDOUT') return '<<TIMEOUT>>';
-                if (proc.error) return `<<ERROR: ${proc.error.message}>>`;
-                if (proc.status !== 0) return `<<RUNTIME ERROR>>\n${proc.stderr}`;
-                return proc.stdout.trim();
-            };
-
-            const solOut = getOutput(solProc, 'Solution');
-            const bruteOut = getOutput(bruteProc, 'Brute');
+            if (solResult.error && !failFound) {
+                failFound = true;
+                panel.webview.postMessage({ command: 'status', text: solResult.message, type: 'error' });
+                return;
+            }
+            if (bruteResult.error && !failFound) {
+                failFound = true;
+                panel.webview.postMessage({ command: 'status', text: bruteResult.message, type: 'error' });
+                return;
+            }
 
             // Store outputs for debugging
             allInput += `=== Test #${i} ===\n${input}\n\n`;
-            allSolOut += `=== Test #${i} ===\n${solOut}\n\n`;
-            allBruteOut += `=== Test #${i} ===\n${bruteOut}\n\n`;
+            allSolOut += `=== Test #${i} ===\n${solResult.output}\n\n`;
+            allBruteOut += `=== Test #${i} ===\n${bruteResult.output}\n\n`;
 
-            if (solOut !== bruteOut && !failFound) {
+            if (solResult.output !== bruteResult.output && !failFound) {
                 failFound = true;
                 panel.webview.postMessage({
                     command: 'fail',
                     caseIndex: i,
                     input: input,
-                    expected: bruteOut,
-                    solution: solOut
+                    expected: bruteResult.output,
+                    solution: solResult.output
                 });
                 return;
             }
-            
             if (!failFound) {
                 panel.webview.postMessage({ command: 'pass', caseIndex: i });
             }
         }
     };
-    
     const workers = Array.from({ length: Math.min(cpuCount, maxTests) }, () => worker());
     await Promise.all(workers);
 
@@ -385,15 +385,19 @@ async function runStressTests(workDir, exeExt, panel) {
 
 // --- PROBLEM FETCHING ---
 
-async function handleFetchProblem(slug) {
+async function handleFetchProblem(slug, panel) {
     try {
-        
         const workspaceRoot = getWorkspaceRoot();
         const workDir = path.join(workspaceRoot, 'stress tester');
-        const isInteger = /^\d+$/.test(slug);
+        // Normalize slug: lowercase, replace spaces with dashes, preserve numbers
+        let normalizedSlug = slug;
+        if (!/^\d+$/.test(slug)) {
+            normalizedSlug = slug.trim().toLowerCase().replace(/\s+/g, '-');
+        }
+        const isInteger = /^\d+$/.test(normalizedSlug);
         const problemTitle = isInteger
-            ? await fetchProblemById(Number(slug))
-            : slug;
+            ? await fetchProblemById(Number(normalizedSlug))
+            : normalizedSlug;
 
         if (!problemTitle) throw new Error("Problem not found");
 
@@ -406,7 +410,6 @@ async function handleFetchProblem(slug) {
             fs.mkdirSync(workDir, { recursive: true });
         }
 
-        // Create subdirectories
         const utilsDir = path.join(workDir, 'utils');
         const textIODir = path.join(workDir, 'textIO');
         if (!fs.existsSync(utilsDir)) {
@@ -438,7 +441,6 @@ async function handleFetchProblem(slug) {
             }
             // If we can't parse, log a warning and return the original
             if (!arrMatch || !targetMatch) {
-                console.warn('Could not parse sample input, using raw:', sampleInput);
                 return sampleInput.trim();
             }
             return `${numArr}\n${target}`;
@@ -474,54 +476,8 @@ async function handleFetchProblem(slug) {
 
         // Ensure canonical template.cpp exists in stress tester/utils
         const canonicalTemplatePath = path.resolve(workspaceRoot, 'stress tester', 'utils', 'template.cpp');
-        const canonicalTemplateContent = `#include <bits/stdc++.h>
-#include "./utils/json.hpp"
-using namespace std;
-using json = nlohmann::json;
-
-// $LEETCODE_FUNCTION$
-
-int main() {
-    string line;
-    getline(cin, line); vector<int> nums = json::parse(line);
-    getline(cin, line); int n = json::parse(line);
-    Solution sol;
-    auto result = sol.FUNCTION_NAME(PARAMS);
-
-    // For int or string:
-    // cout << result << endl;
-
-    // For vector<int>:
-    cout << "[";
-    for (int i = 0; i < result.size(); ++i) {
-        cout << result[i];
-        if (i + 1 < result.size()) cout << ",";
-    }
-    cout << "]" << endl;
-
-    // For vector<vector<int>>:
-    // cout << "[";
-    // for (int i = 0; i < result.size(); ++i) {
-    //     cout << "[";
-    //     for (int j = 0; j < result[i].size(); ++j) {
-    //         cout << result[i][j];
-    //         if (j + 1 < result[i].size()) cout << ",";
-    //     }
-    //     cout << "]";
-    //     if (i + 1 < result.size()) cout << ",";
-    // }
-    // cout << "]" << endl;
-
-    return 0;
-}
-// Example usage (use as needed):
-// getline(cin, line); int n = json::parse(line);
-// getline(cin, line); string s = json::parse(line);
-// getline(cin, line); vector<int> nums = json::parse(line);
-// getline(cin, line); vector<vector<int>> matrix = json::parse(line);
-`;
         if (!fs.existsSync(canonicalTemplatePath)) {
-            fs.writeFileSync(canonicalTemplatePath, canonicalTemplateContent);
+            fs.writeFileSync(canonicalTemplatePath, CANONICAL_TEMPLATE);
         }
         const templateContent = fs.readFileSync(canonicalTemplatePath, 'utf8');
 
@@ -533,8 +489,10 @@ int main() {
             funcName = funcMatch[1];
             funcParams = funcMatch[2].split(',').map(s => s.trim().split(' ').pop().replace(/&|\*/g, '')).filter(Boolean).join(', ');
         }
+        // Replace all [i] and [j] with .at(i) and .at(j) in the user code for safety
+        let safeCppSnippet = cppSnippet.replace(/([a-zA-Z0-9_]+)\s*\[\s*([a-zA-Z0-9_]+)\s*\]/g, '$1.at($2)');
         let solutionContent = templateContent.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${funcName}(${funcParams})`);
-        solutionContent = solutionContent.replace('// $LEETCODE_FUNCTION$', cppSnippet);
+        solutionContent = solutionContent.replace('// $LEETCODE_FUNCTION$', safeCppSnippet);
         fs.writeFileSync(path.join(workDir, 'solution.cpp'), solutionContent);
 
         // Fetch official solution
@@ -555,20 +513,37 @@ int main() {
                 bFuncName = bFuncMatch[1];
                 bFuncParams = bFuncMatch[2].split(',').map(s => s.trim().split(' ').pop().replace(/&|\*/g, '')).filter(Boolean).join(', ');
             }
+            // Replace all [i] and [j] with .at(i) and .at(j) in the brute code for safety
+            let safeBruteSnippet = bruteSnippet.replace(/([a-zA-Z0-9_]+)\s*\[\s*([a-zA-Z0-9_]+)\s*\]/g, '$1.at($2)');
             bruteContent = bruteContent.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${bFuncName}(${bFuncParams})`);
-            bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', bruteSnippet);
+            bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', safeBruteSnippet);
         } else {
             bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', '// No official solution available for this problem.');
             bruteContent = bruteContent.replace('sol.FUNCTION_NAME(PARAMS)', 'sol.FUNCTION_NAME(PARAMS)');
         }
         fs.writeFileSync(brutePath, bruteContent);
 
+        // At the end, write a marker file to indicate successful fetch (store the canonical slug/titleSlug)
+        fs.writeFileSync(path.join(workDir, '.fetched'), problemTitle);
     } catch (error) {
         vscode.window.showErrorMessage(`Fetch failed: ${error.message}`);
+        if (panel && panel.webview) {
+            panel.webview.postMessage({
+                command: 'status',
+                text: `Fetch failed: ${error.message}`,
+                type: 'error'
+            });
+        }
+        // Remove marker if fetch failed
+        try {
+            const workspaceRoot = getWorkspaceRoot();
+            const workDir = path.join(workspaceRoot, 'stress tester');
+            const marker = path.join(workDir, '.fetched');
+            if (fs.existsSync(marker)) fs.unlinkSync(marker);
+        } catch {}
+        throw error;
     }
 }
-
-// --- MAIN HANDLER ---
 
 async function handleFetchAndStress(slug, panel, mode) {
     try {
@@ -578,12 +553,39 @@ async function handleFetchAndStress(slug, panel, mode) {
             fs.mkdirSync(workDir, { recursive: true });
         }
 
+        // Normalize slug: lowercase, replace spaces with dashes, preserve numbers
+        let normalizedSlug = slug;
+        if (!/^\d+$/.test(slug)) {
+            normalizedSlug = slug.trim().toLowerCase().replace(/\s+/g, '-');
+        }
+
+        // Check for marker file and match slug
+        const marker = path.join(workDir, '.fetched');
+        if (!fs.existsSync(marker)) {
+            panel.webview.postMessage({
+                command: 'status',
+                text: 'This problem was not successfully fetched. Please fetch a valid problem before running tests.',
+                type: 'error'
+            });
+            return;
+        }
+        // Read the fetched problem slug/title
+        const fetchedSlug = fs.readFileSync(marker, 'utf8').trim();
+        const isInteger = /^\d+$/.test(normalizedSlug);
+        const problemTitle = isInteger ? await fetchProblemById(Number(normalizedSlug)) : normalizedSlug;
+        if (!problemTitle) throw new Error("Problem not found");
+        // Only allow running if the fetched problem matches the requested one
+        if (problemTitle !== fetchedSlug) {
+            panel.webview.postMessage({
+                command: 'status',
+                text: 'The problem you are trying to test was not the one most recently fetched. Please fetch this problem first.',
+                type: 'error'
+            });
+            return;
+        }
+
         // --- Step 1: Fetch problem data ---
         panel.webview.postMessage({ command: 'log', message: 'Fetching problem data...' });
-        const isInteger = /^\d+$/.test(slug);
-        const problemTitle = isInteger ? await fetchProblemById(Number(slug)) : slug;
-        if (!problemTitle) throw new Error("Problem not found");
-
         const q = await fetchProblemByName(problemTitle);
         const samples = extractSamples(q.content);
         if (samples.length === 0 && q.sampleTestCase) {

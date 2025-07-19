@@ -49,7 +49,7 @@ class PanelProvider {
 
             // Import the fetch function
             const { handleFetchProblem } = require('../utils/stressRunner');
-            await handleFetchProblem(problemId);
+            await handleFetchProblem(problemId, this.view);
             
             this.view.webview.postMessage({
                 command: 'status',
@@ -58,9 +58,13 @@ class PanelProvider {
             });
             
         } catch (error) {
+            let errorMsg = error.message;
+            if (errorMsg && errorMsg.includes('No C++ solution snippet found')) {
+                errorMsg = 'This problem is not available for stress testing.';
+            }
             this.view.webview.postMessage({
                 command: 'status',
-                text: `Fetch failed: ${error.message}`,
+                text: `Fetch failed: ${errorMsg}`,
                 type: 'error'
             });
         }
