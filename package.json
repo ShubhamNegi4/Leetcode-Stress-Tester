@@ -9,22 +9,48 @@
   },
   "version": "0.1.1",
   "engines": {
-    "vscode": "^1.64.0"
+    "vscode": "^1.75.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onCommand:leetcode-stress-tester.showStressTester"
   ],
   "main": "./src/frontend/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "leetcode-stress-tester.showStressTester",
-        "title": "LeetCode Stress Tester"
+        "command": "leetcode-stress-tester.fetchProblem",
+        "title": "Stress Tester: Fetch Problem"
+      },
+      {
+        "command": "leetcode-stress-tester.runSamples",
+        "title": "Stress Tester: Run Sample Tests"
+      },
+      {
+        "command": "leetcode-stress-tester.runStress",
+        "title": "Stress Tester: Run Stress Tests"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "leetcode-stress-container",
+          "title": "Stress Tester",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "leetcode-stress-container": [
+        {
+          "type": "webview",
+          "id": "leetcodeStressPanelView",
+          "name": "Stress Tester Controls",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "LeetCode Stress Tester Settings",
@@ -47,13 +73,12 @@
     "test": "echo 'No tests defined'"
   },
   "dependencies": {
+    "@vscode/webview-ui-toolkit": "^1.2.2",
     "cheerio": "^1.1.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.7",
-    "@types/vscode": "^1.64.0",
-    "@vscode/test-electron": "^2.0.0",
-    "eslint": "^8.0.0"
+    "@types/vscode": "^1.75.0"
   }
 }

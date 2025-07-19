@@ -39,33 +39,18 @@ A Visual Studio Code extension for competitive programmers to fetch LeetCode pro
 
 ## 🧑‍💻 Usage
 
-1. **Open the Command Palette** (`Ctrl+Shift+P`) and run `LeetCode Stress Tester`.
-2. **Enter a LeetCode problem ID or slug** in the UI.
-3. **Edit `solution.cpp`** in the `stress tester/` directory with your solution.
-4. **Edit `gen.cpp`** if you want to customize random test generation.
-5. **Run Sample or Stress Tests** using the UI buttons:
-   - **Run Samples:** Tests your solution on LeetCode's sample cases.
-   - **Run Stress:** Runs your solution and the official solution on many random cases, comparing outputs.
-6. **Debug:** If a test fails, the input and outputs are saved for inspection in the `stress tester/` directory.
+1. **Open the "Stress Tester" panel** from the VS Code activity bar (left sidebar, beaker icon).
+2. **Enter a LeetCode problem ID or slug** in the input field at the top of the panel.
+3. **Click one of the three buttons**:
+   - **📥 Fetch Problem:** Downloads the problem, sets up files, and fetches sample cases and solutions.
+   - **🧪 Run Samples:** Runs your solution on LeetCode's sample cases.
+   - **⚡ Run Stress Tests:** Runs your solution and the brute-force solution on many random cases, comparing outputs.
+4. **Edit `solution.cpp`** in the `stress tester/` directory with your solution.
+5. **Edit `gen.cpp`** if you want to customize random test generation.
+6. **Debug:** If a test fails, the input and outputs are saved for inspection in the `stress tester/` directory. Logs and status messages appear in the panel.
 
 ---
 
 ## 📁 Project Structure
 
-```
-leetcode-stress-tester/
-├── src/
-│   ├── frontend/         # VS Code extension UI and logic
-│   └── utils/            # Node.js utilities for fetching and testing
-├── stress tester/        # All C++ files and test logs
-│   ├── gen.cpp           # Random test case generator (edit as needed)
-│   ├── solution.cpp      # Your solution (edit this)
-│   ├── brute.cpp         # Brute-force solution (auto-fetched)
-│   ├── input.txt         # Current test input
-│   ├── all_input.txt     # All inputs for failed stress tests
-│   ├── solution_output.txt  # Your solution's outputs
-│   ├── brute_output.txt     # Brute-force solution's outputs
-│   └── stress.sh         # Bash script for manual stress testing
-├── README.md
-└── ...
 ```

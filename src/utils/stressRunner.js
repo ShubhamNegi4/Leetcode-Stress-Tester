@@ -28,11 +28,22 @@ function parseNumbers(str) {
 }
 
 function formatSampleInput(input) {
-    const numbers = input.match(/-?\d+/g) || [];
-    if (numbers.length < 2) return input;
-    const target = numbers.pop();
-    const array = `[${numbers.join(',')}]`;
-    return `${array}\n${target}\n`;
+    // Try to extract numbers and target from the sample input string
+    // e.g. 'nums = [2,7,11,15], target = 9' => '[2,7,11,15]\n9'
+    const arrMatch = input.match(/\[.*?\]/);
+    const numArr = arrMatch ? arrMatch[0] : '[]';
+    const targetMatch = input.match(/target\s*=\s*(-?\d+)/);
+    const target = targetMatch ? targetMatch[1] : '0';
+    // If the input is already in JSON-per-line, just return it
+    if (/^\s*\[.*\]\s*\n\s*-?\d+\s*$/.test(input.trim())) {
+        return input.trim();
+    }
+    // If we can't parse, log a warning and return the original
+    if (!arrMatch || !targetMatch) {
+        console.warn('Could not parse sample input, using raw:', input);
+        return input.trim();
+    }
+    return `${numArr}\n${target}`;
 }
 
 function getMTime(file) {
@@ -55,25 +66,20 @@ function loadSamplesFromFile(workDir) {
     }
 
     const fileContent = fs.readFileSync(inputTxtPath, 'utf8');
-    const rawSamples = fileContent.split(/\n\s*\n/).filter(Boolean);
+    // Match all blocks of: input, --- (on its own line), output
+    const regex = /([\s\S]*?)\n\s*---+\s*\n([\s\S]*?)(?=\n\S|\n*$)/g;
     const samples = [];
-
-    for (const raw of rawSamples) {
-        const parts = raw.split(/\n---\n/);
-        if (parts.length === 2) {
-            samples.push({ 
-                input: parts[0].trim(), 
-                output: parts[1].trim() 
-            });
-        } else {
-            throw new Error('Each sample in input.txt must have input, a line with --- and expected output, separated by blank lines.');
+    let match;
+    while ((match = regex.exec(fileContent)) !== null) {
+        const input = match[1].trim();
+        const output = match[2].trim();
+        if (input && output) {
+            samples.push({ input, output });
         }
     }
-
     if (samples.length === 0) {
         throw new Error('No valid samples found in input.txt.');
     }
-
     return samples;
 }
 
@@ -97,10 +103,20 @@ function compileIfNeeded(options) {
         try {
             const result = spawnSync(cmd, { cwd, shell: true, encoding: 'utf8' });
             if (result.status !== 0) {
-                throw new Error(`Compilation failed for ${src}:\n${result.stderr || result.stdout}`);
+                // Extract the first error line and message
+                const lines = (result.stderr || result.stdout || '').split('\n').filter(Boolean);
+                let errorLine = lines.find(l => l.includes(src));
+                if (!errorLine && lines.length > 0) errorLine = lines[0];
+                let concise = errorLine ? errorLine.trim() : 'Compilation failed.';
+                // Try to extract file, line, and error reason
+                const match = concise.match(/([^:]+):(\d+):(\d+):\s*error: (.*)/);
+                if (match) {
+                    concise = `${match[1]}:${match[2]}:${match[3]}: ${match[4]}`;
+                }
+                return concise;
             }
         } catch (e) {
-            throw new Error(`Compilation command failed for ${src}: ${e.message}`);
+            return `Compilation command failed for ${src}: ${e.message}`;
         }
     }
     return null; // No error
@@ -158,8 +174,13 @@ function compileSources(workDir, mode, panel) {
         panel.webview.postMessage({ command: 'log', message: `Compiling ${comp.src}...` });
         const error = compileIfNeeded(comp);
         if (error) {
-            if (comp.src !== 'brute.cpp') throw new Error(error);
-            else panel.webview.postMessage({ command: 'log', message: `Warning: Could not compile ${comp.src}. Stress test requires it.` });
+            if (comp.src !== 'brute.cpp') {
+                // Send concise error to panel
+                panel.webview.postMessage({ command: 'status', text: `Compilation error in ${comp.src}: ${error}`, type: 'error' });
+                throw new Error(error);
+            } else {
+                panel.webview.postMessage({ command: 'log', message: `Warning: Could not compile ${comp.src}. Stress test requires it.` });
+            }
         }
     }
     return { exeExt, compiler };
@@ -173,6 +194,11 @@ function compileSources(workDir, mode, panel) {
  */
 async function runSampleTests(workDir, exeExt, panel) {
     const samples = loadSamplesFromFile(workDir);
+    console.log('Starting runSampleTests, samples:', samples.length);
+    if (!samples.length) {
+        panel.webview.postMessage({ command: 'status', text: 'No valid samples found.', type: 'error' });
+        return;
+    }
     const cpuCount = Math.min(Math.max(4, os.cpus().length), 16);
     const solCmd = path.join(workDir, `solution${exeExt}`);
 
@@ -190,16 +216,41 @@ async function runSampleTests(workDir, exeExt, panel) {
 
             const { input, output: expected } = samples[i];
             const formattedInput = formatSampleInput(input);
-            const solProc = spawnSync(solCmd, { input: formattedInput, encoding: 'utf8', shell: false, timeout: 2000 });
-            
+            let solProc;
+            try {
+                solProc = spawnSync(solCmd, { input: formattedInput, encoding: 'utf8', shell: false, timeout: 2000 });
+            } catch (err) {
+                panel.webview.postMessage({ command: 'status', text: 'Error running C++ solution: ' + err.message, type: 'error' });
+                failFound = true;
+                return;
+            }
             let solRaw;
             if (solProc.error) {
                 solRaw = `<<ERROR: ${solProc.error.message}>>`;
+                panel.webview.postMessage({ command: 'status', text: solRaw, type: 'error' });
+                failFound = true;
+                return;
             } else if (solProc.status !== 0) {
-                 solRaw = `<<RUNTIME ERROR>>\n${solProc.stderr}`;
+                solRaw = `<<RUNTIME ERROR>>\n${solProc.stderr}`;
+                panel.webview.postMessage({ command: 'status', text: solRaw, type: 'error' });
+                failFound = true;
+                return;
             } else {
                 solRaw = solProc.stdout.trim();
+                if (!solRaw) solRaw = "<<NO OUTPUT>>";
             }
+
+            // Debugging: log command, input, and output
+            console.log('Running sample:', {
+                index: i + 1,
+                command: solCmd,
+                input: formattedInput,
+                status: solProc.status,
+                error: solProc.error,
+                stdout: solProc.stdout,
+                stderr: solProc.stderr,
+                solRaw: solRaw
+            });
 
             const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
 
@@ -232,6 +283,7 @@ async function runSampleTests(workDir, exeExt, panel) {
     if (!failFound) {
         panel.webview.postMessage({ command: 'done' });
     }
+    console.log('Finished runSampleTests');
 }
 
 /**
@@ -335,6 +387,7 @@ async function runStressTests(workDir, exeExt, panel) {
 
 async function handleFetchProblem(slug) {
     try {
+        
         const workspaceRoot = getWorkspaceRoot();
         const workDir = path.join(workspaceRoot, 'stress tester');
         const isInteger = /^\d+$/.test(slug);
@@ -372,11 +425,37 @@ async function handleFetchProblem(slug) {
 
         // Save all sample test cases to textIO/input.txt, separated by blank lines
         const samples = extractSamples(q.content);
+        function toLeetCodeJsonInput(sampleInput) {
+            // Try to extract numbers and target from the sample input string
+            // e.g. 'nums = [2,7,11,15], target = 9' => '[2,7,11,15]\n9'
+            const arrMatch = sampleInput.match(/\[.*?\]/);
+            const numArr = arrMatch ? arrMatch[0] : '[]';
+            const targetMatch = sampleInput.match(/target\s*=\s*(-?\d+)/);
+            const target = targetMatch ? targetMatch[1] : '0';
+            // If the input is already in JSON-per-line, just return it
+            if (/^\s*\[.*\]\s*\n\s*-?\d+\s*$/.test(sampleInput.trim())) {
+                return sampleInput.trim();
+            }
+            // If we can't parse, log a warning and return the original
+            if (!arrMatch || !targetMatch) {
+                console.warn('Could not parse sample input, using raw:', sampleInput);
+                return sampleInput.trim();
+            }
+            return `${numArr}\n${target}`;
+        }
         if (samples.length > 0) {
-            const sampleContent = samples.map(s => `${s.input.trim()}\n---\n${s.output.trim()}`).join('\n\n');
+            const sampleContent = samples.map(s => `${toLeetCodeJsonInput(s.input)}\n---\n${s.output.trim()}`).join('\n\n');
             fs.writeFileSync(path.join(textIODir, 'input.txt'), sampleContent);
         } else if (q.sampleTestCase) {
-            fs.writeFileSync(path.join(textIODir, 'input.txt'), q.sampleTestCase);
+            // Split sampleTestCase into input/output pairs if possible
+            const lines = q.sampleTestCase.split(/\n+/).map(l => l.trim()).filter(Boolean);
+            let formatted = '';
+            for (let i = 0; i < lines.length; i += 2) {
+                const input = lines[i];
+                const output = lines[i + 1] || '';
+                formatted += `${toLeetCodeJsonInput(input)}\n---\n${output}\n\n`;
+            }
+            fs.writeFileSync(path.join(textIODir, 'input.txt'), formatted.trim());
         } else {
             throw new Error('No sample test cases found');
         }
@@ -393,10 +472,58 @@ async function handleFetchProblem(slug) {
             fs.copyFileSync(genSrc, genDst);
         }
 
-        // Use the full template if present for solution.cpp
-        let templateContent = fs.existsSync(templateDst)
-            ? fs.readFileSync(templateDst, 'utf8')
-            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
+        // Ensure canonical template.cpp exists in stress tester/utils
+        const canonicalTemplatePath = path.resolve(workspaceRoot, 'stress tester', 'utils', 'template.cpp');
+        const canonicalTemplateContent = `#include <bits/stdc++.h>
+#include "./utils/json.hpp"
+using namespace std;
+using json = nlohmann::json;
+
+// $LEETCODE_FUNCTION$
+
+int main() {
+    string line;
+    getline(cin, line); vector<int> nums = json::parse(line);
+    getline(cin, line); int n = json::parse(line);
+    Solution sol;
+    auto result = sol.FUNCTION_NAME(PARAMS);
+
+    // For int or string:
+    // cout << result << endl;
+
+    // For vector<int>:
+    cout << "[";
+    for (int i = 0; i < result.size(); ++i) {
+        cout << result[i];
+        if (i + 1 < result.size()) cout << ",";
+    }
+    cout << "]" << endl;
+
+    // For vector<vector<int>>:
+    // cout << "[";
+    // for (int i = 0; i < result.size(); ++i) {
+    //     cout << "[";
+    //     for (int j = 0; j < result[i].size(); ++j) {
+    //         cout << result[i][j];
+    //         if (j + 1 < result[i].size()) cout << ",";
+    //     }
+    //     cout << "]";
+    //     if (i + 1 < result.size()) cout << ",";
+    // }
+    // cout << "]" << endl;
+
+    return 0;
+}
+// Example usage (use as needed):
+// getline(cin, line); int n = json::parse(line);
+// getline(cin, line); string s = json::parse(line);
+// getline(cin, line); vector<int> nums = json::parse(line);
+// getline(cin, line); vector<vector<int>> matrix = json::parse(line);
+`;
+        if (!fs.existsSync(canonicalTemplatePath)) {
+            fs.writeFileSync(canonicalTemplatePath, canonicalTemplateContent);
+        }
+        const templateContent = fs.readFileSync(canonicalTemplatePath, 'utf8');
 
         // Parse function name and params from cppSnippet (LeetCode user solution)
         let funcMatch = cppSnippet.match(/([a-zA-Z0-9_]+)\s*\(([^)]*)\)/);
@@ -416,11 +543,9 @@ async function handleFetchProblem(slug) {
             isAvailable = await fetchGithubSolution(problemTitle, workDir);
         }
 
-        // Always use the template for brute.cpp, inserting the official solution if available
+        // Always use the canonical template for brute.cpp, inserting the official solution if available
         const brutePath = path.join(workDir, 'brute.cpp');
-        let bruteTemplate = fs.existsSync(templateDst)
-            ? fs.readFileSync(templateDst, 'utf8')
-            : `#include <bits/stdc++.h>\nusing namespace std;\n\n// $SOLUTION_PLACEHOLDER\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    \n    // Your code here\n    \n    return 0;\n}`;
+        let bruteContent = templateContent;
         if (isAvailable && fs.existsSync(brutePath)) {
             const bruteSnippet = fs.readFileSync(brutePath, 'utf8');
             let bFuncMatch = bruteSnippet.match(/([a-zA-Z0-9_]+)\s*\(([^)]*)\)/);
@@ -430,13 +555,13 @@ async function handleFetchProblem(slug) {
                 bFuncName = bFuncMatch[1];
                 bFuncParams = bFuncMatch[2].split(',').map(s => s.trim().split(' ').pop().replace(/&|\*/g, '')).filter(Boolean).join(', ');
             }
-            let bruteContent = bruteTemplate.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${bFuncName}(${bFuncParams})`);
+            bruteContent = bruteContent.replace('sol.FUNCTION_NAME(PARAMS)', `sol.${bFuncName}(${bFuncParams})`);
             bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', bruteSnippet);
-            fs.writeFileSync(brutePath, bruteContent);
         } else {
-            // No official solution available
-            fs.writeFileSync(brutePath, '// No official solution available for this problem.\n');
+            bruteContent = bruteContent.replace('// $LEETCODE_FUNCTION$', '// No official solution available for this problem.');
+            bruteContent = bruteContent.replace('sol.FUNCTION_NAME(PARAMS)', 'sol.FUNCTION_NAME(PARAMS)');
         }
+        fs.writeFileSync(brutePath, bruteContent);
 
     } catch (error) {
         vscode.window.showErrorMessage(`Fetch failed: ${error.message}`);
@@ -462,7 +587,7 @@ async function handleFetchAndStress(slug, panel, mode) {
         const q = await fetchProblemByName(problemTitle);
         const samples = extractSamples(q.content);
         if (samples.length === 0 && q.sampleTestCase) {
-            samples.push({ input:w q.sampleTestCase, output: "Expected output not available in this format" });
+            samples.push({ input: q.sampleTestCase, output: "Expected output not available in this format" });
         }
         if (samples.length === 0) {
             throw new Error('No sample test cases found for this problem.');
