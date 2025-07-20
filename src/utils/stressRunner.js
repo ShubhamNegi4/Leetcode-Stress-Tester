@@ -14,6 +14,9 @@ const {
 const { extractSamples } = require('./parseProblem.js');
 const { CANONICAL_TEMPLATE } = require('./canonicalTemplate');
 
+// Import spawn from child_process
+const { spawn } = require('child_process');
+
 // --- UTILITY FUNCTIONS ---
 
 function getWorkspaceRoot() {
@@ -97,23 +100,16 @@ function compileIfNeeded(options) {
     if (!fs.existsSync(srcPath)) {
         return `Source file not found: ${src}`;
     }
-
     // Always recompile, regardless of timestamps
-    const cmd = `${compiler} ${flags} "${srcPath}" -o "${exePath}"`;
+    const cmd = [compiler, ...flags, srcPath, '-o', exePath];
+    const start = Date.now();
     try {
-        const result = spawnSync(cmd, { cwd, shell: true, encoding: 'utf8' });
+        const result = spawnSync(cmd[0], cmd.slice(1), { cwd, encoding: 'utf8', shell: false });
+        const elapsed = ((Date.now() - start) / 1000).toFixed(2);
         if (result.status !== 0) {
-            // Extract the first error line and message
-            const lines = (result.stderr || result.stdout || '').split('\n').filter(Boolean);
-            let errorLine = lines.find(l => l.includes(src));
-            if (!errorLine && lines.length > 0) errorLine = lines[0];
-            let concise = errorLine ? errorLine.trim() : 'Compilation failed.';
-            // Try to extract file, line, and error reason
-            const match = concise.match(/([^:]+):(\d+):(\d+):\s*error: (.*)/);
-            if (match) {
-                concise = `${match[1]}:${match[2]}:${match[3]}: ${match[4]}`;
-            }
-            return concise;
+            let errorMsg = `Compilation failed for ${src} (took ${elapsed}s):\n`;
+            errorMsg += (result.stderr || '') + (result.stdout || '');
+            return errorMsg.trim();
         }
     } catch (e) {
         return `Compilation command failed for ${src}: ${e.message}`;
@@ -139,27 +135,36 @@ function compileSources(workDir, mode, panel) {
             throw new Error('No C++ compiler found. Please install g++ or clang++.');
         }
     }
-
     panel.webview.postMessage({ command: 'log', message: `Using compiler: ${compiler}` });
-
-    const getFlags = (baseFlags) => {
+    const getFlags = (baseFlagsArr) => {
         if (compiler === 'clang++') {
-            return baseFlags
-                .replace(/-march=native/g, '-march=native')
-                .replace(/-mtune=native/g, '')
-                .replace(/-flto/g, '-flto=thin');
+            return baseFlagsArr.map(flag =>
+                flag === '-march=native' ? '-march=native' :
+                flag === '-mtune=native' ? '' :
+                flag === '-flto' ? '-flto=thin' :
+                flag
+            ).filter(Boolean);
         }
-        return baseFlags;
+        return baseFlagsArr;
     };
-
-    // Check if precompiled header exists
-    const pchPath = path.join(workDir, 'pch', 'stdc++.h.gch');
-    const pchFlag = fs.existsSync(pchPath) ? '-include pch/stdc++.h.gch' : '';
-    
-    const solFlags = getFlags(`-std=c++17 -O3 -pipe -march=native -mtune=native -flto -ffast-math -funroll-loops -fomit-frame-pointer -DNDEBUG ${pchFlag}`);
-    const bruteFlags = getFlags(`-std=c++17 -O1 -pipe -DNDEBUG ${pchFlag}`);
-    const genFlags = getFlags(`-std=c++17 -O2 -pipe -DNDEBUG ${pchFlag}`);
-
+    // In compileSources, add precompiled header generation
+    const pchDir = path.join(workDir, 'pch');
+    if (!fs.existsSync(pchDir)) {
+        fs.mkdirSync(pchDir);
+    }
+    const stdcppHeader = path.join(pchDir, 'stdc++.h');
+    const pchPath = path.join(pchDir, 'stdc++.h.gch');
+    if (!fs.existsSync(pchPath)) {
+        panel.webview.postMessage({ command: 'log', message: 'Generating precompiled header...' });
+        fs.writeFileSync(stdcppHeader, '#include <bits/stdc++.h>');
+        const pchCmd = `${compiler} -std=c++17 "${stdcppHeader}" -o "${pchPath}"`;
+        spawnSync(pchCmd, { cwd: pchDir, shell: true });
+    }
+    const pchFlagArr = fs.existsSync(pchPath) ? ['-include', stdcppHeader] : [];
+    // Change solFlags to -O2 for faster compile
+    const solFlags = getFlags(['-std=c++17', '-O2', '-pipe', '-march=native', '-DNDEBUG', ...pchFlagArr]);
+    const bruteFlags = getFlags(['-std=c++17', '-O1', '-pipe', '-DNDEBUG', ...pchFlagArr]);
+    const genFlags = getFlags(['-std=c++17', '-O2', '-pipe', '-DNDEBUG', ...pchFlagArr]);
     const compilations = [];
     if (mode === 'runSamples' || mode === 'runStress') {
         compilations.push({ src: 'solution.cpp', exe: `solution${exeExt}`, flags: solFlags, cwd: workDir, compiler });
@@ -168,13 +173,12 @@ function compileSources(workDir, mode, panel) {
         compilations.push({ src: 'gen.cpp', exe: `gen${exeExt}`, flags: genFlags, cwd: workDir, compiler });
         compilations.push({ src: 'brute.cpp', exe: `brute${exeExt}`, flags: bruteFlags, cwd: workDir, compiler });
     }
-
+    const start = Date.now();
     for (const comp of compilations) {
         panel.webview.postMessage({ command: 'log', message: `Compiling ${comp.src}...` });
         const error = compileIfNeeded(comp);
         if (error) {
             if (comp.src !== 'brute.cpp') {
-                // Send concise error to panel
                 panel.webview.postMessage({ command: 'status', text: `Compilation error in ${comp.src}: ${error}`, type: 'error' });
                 throw new Error(error);
             } else {
@@ -182,19 +186,30 @@ function compileSources(workDir, mode, panel) {
             }
         }
     }
+    const elapsed = ((Date.now() - start) / 1000).toFixed(2);
+    panel.webview.postMessage({ command: 'log', message: `Compilation finished in ${elapsed}s.` });
     return { exeExt, compiler };
 }
 
 // --- CORE LOGIC: TEST RUNNERS ---
 
-function getOutput(proc, name) {
-    if (proc.error && proc.error.code !== 'ETIMEDOUT') return { error: 'exec', message: `<<ERROR: ${proc.error.message}>>` };
-    if (proc.status !== 0) {
-        let reason = 'Runtime error';
-        if (proc.stderr) {
-            reason = proc.stderr.split('\n').find(line => line.trim()) || 'Runtime error';
+function getOutput(proc, name, timeLimitMs) {
+    if (proc.error) {
+        if (proc.error.code === 'ETIMEDOUT') {
+            return { error: 'timeout', message: `⏰ ${name}.cpp: Time Limit Exceeded (${timeLimitMs} ms)` };
         }
+        return { error: 'exec', message: `<<ERROR: ${proc.error.message}>>` };
+    }
+    if (proc.signal) {
+        return { error: 'signal', message: `💥 ${name}.cpp: Process terminated by signal: ${proc.signal}` };
+    }
+    if (proc.status !== 0) {
+        let reason = proc.stderr ? proc.stderr.split('\n').find(line => line.trim()) : '';
+        reason = reason || `Exited with code ${proc.status}`;
         return { error: 'runtime', message: `❌ ${name}.cpp: ${reason}` };
+    }
+    if (!proc.stdout.trim()) {
+        return { error: 'no_output', message: `⚠️ ${name}.cpp: No output produced` };
     }
     return { error: null, output: proc.stdout.trim() };
 }
@@ -215,36 +230,33 @@ async function runSampleTests(workDir, exeExt, panel) {
         panel.webview.postMessage({ command: 'status', text: 'No valid samples found.', type: 'error' });
         return;
     }
-    const cpuCount = Math.min(Math.max(4, os.cpus().length), 16);
+    const isWindows = process.platform === 'win32';
+    const cpuCount = Math.min(isWindows ? 4 : Math.max(4, os.cpus().length), 16);
     const solCmd = path.join(workDir, `solution${exeExt}`);
-
     let nextSampleIndex = 0;
     let failFound = false;
-
+    const startAll = Date.now();
     const worker = async () => {
         while (true) {
             const i = nextSampleIndex++;
             if (i >= samples.length || failFound) {
                 return;
             }
-
-            // Always send progress before processing the test case
+            const testStart = Date.now();
             panel.webview.postMessage({ command: 'progress', i: i + 1, total: samples.length });
-
             const { input, output: expected } = samples[i];
             const formattedInput = formatSampleInput(input);
             let solProc = spawnSync(solCmd, { input: formattedInput, encoding: 'utf8', shell: false, timeout: 2000 });
-            const solResult = getOutput(solProc, 'solution');
+            const solResult = getOutput(solProc, 'solution', 2000);
+            const elapsed = ((Date.now() - testStart) / 1000).toFixed(2);
             if (solResult.error && !failFound) {
                 failFound = true;
-                panel.webview.postMessage({ command: 'status', text: solResult.message, type: 'error' });
+                panel.webview.postMessage({ command: 'status', text: `${solResult.message} (Test ${i + 1}, ${elapsed}s)`, type: 'error' });
                 return;
             }
             let solRaw = solResult.output;
             if (!solRaw) solRaw = "<<NO OUTPUT>>";
-
             const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
-
             if (!ok && !failFound) {
                 failFound = true;
                 panel.webview.postMessage({
@@ -252,25 +264,26 @@ async function runSampleTests(workDir, exeExt, panel) {
                     caseIndex: i + 1,
                     input: formattedInput,
                     expected,
-                    solution: solRaw
+                    solution: solRaw,
+                    time: elapsed
                 });
                 return;
             }
-
             panel.webview.postMessage({
                 command: 'sample',
                 caseIndex: i + 1,
                 input: formattedInput,
                 expected,
                 solution: solRaw,
-                passed: ok
+                passed: ok,
+                time: elapsed
             });
         }
     };
-
     const workers = Array.from({ length: Math.min(cpuCount, samples.length) }, () => worker());
     await Promise.all(workers);
-
+    const totalElapsed = ((Date.now() - startAll) / 1000).toFixed(2);
+    panel.webview.postMessage({ command: 'log', message: `Sample tests finished in ${totalElapsed}s.` });
     if (!failFound) {
         panel.webview.postMessage({ command: 'done' });
     }
@@ -283,7 +296,8 @@ async function runStressTests(workDir, exeExt, panel) {
     const cfg = vscode.workspace.getConfiguration('leetcodeStressTester');
     const maxTests = cfg.get('testCount', 100);
     const timeLimit = cfg.get('timeLimitMs', 2000);
-    const cpuCount = Math.min(Math.max(4, os.cpus().length), 16);
+    const isWindows = process.platform === 'win32';
+    const cpuCount = Math.min(isWindows ? 4 : Math.max(4, os.cpus().length), 16);
 
     const genCmd = path.join(workDir, `gen${exeExt}`);
     const solCmd = path.join(workDir, `solution${exeExt}`);
@@ -307,6 +321,7 @@ async function runStressTests(workDir, exeExt, panel) {
     let allInput = '';
     let allSolOut = '';
     let allBruteOut = '';
+    const startAll = Date.now();
 
     const worker = async () => {
         while (true) {
@@ -314,42 +329,36 @@ async function runStressTests(workDir, exeExt, panel) {
             if (i > maxTests || failFound) {
                 return;
             }
-
-            // Always send progress before processing the test case
+            const testStart = Date.now();
             panel.webview.postMessage({ command: 'progress', i, total: maxTests });
-
             // Generate input
             const genProc = spawnSync(genCmd, { encoding: 'utf8', shell: false });
-            const genResult = getOutput(genProc, 'gen');
+            const genResult = getOutput(genProc, 'gen', timeLimit);
             if (genResult.error && !failFound) {
                 failFound = true;
-                panel.webview.postMessage({ command: 'status', text: genResult.message, type: 'error' });
+                panel.webview.postMessage({ command: 'status', text: `${genResult.message} (Test ${i})`, type: 'error' });
                 return;
             }
             const input = genResult.output;
-
             // Run solution and brute force
             const solProc = spawnSync(solCmd, { input, encoding: 'utf8', shell: false, timeout: timeLimit });
             const bruteProc = spawnSync(bruteCmd, { input, encoding: 'utf8', shell: false, timeout: timeLimit });
-            const solResult = getOutput(solProc, 'solution');
-            const bruteResult = getOutput(bruteProc, 'brute');
-
+            const solResult = getOutput(solProc, 'solution', timeLimit);
+            const bruteResult = getOutput(bruteProc, 'brute', timeLimit);
+            const elapsed = ((Date.now() - testStart) / 1000).toFixed(2);
             if (solResult.error && !failFound) {
                 failFound = true;
-                panel.webview.postMessage({ command: 'status', text: solResult.message, type: 'error' });
+                panel.webview.postMessage({ command: 'status', text: `${solResult.message} (Test ${i}, ${elapsed}s)`, type: 'error' });
                 return;
             }
             if (bruteResult.error && !failFound) {
                 failFound = true;
-                panel.webview.postMessage({ command: 'status', text: bruteResult.message, type: 'error' });
+                panel.webview.postMessage({ command: 'status', text: `${bruteResult.message} (Test ${i}, ${elapsed}s)`, type: 'error' });
                 return;
             }
-
-            // Store outputs for debugging
             allInput += `=== Test #${i} ===\n${input}\n\n`;
             allSolOut += `=== Test #${i} ===\n${solResult.output}\n\n`;
             allBruteOut += `=== Test #${i} ===\n${bruteResult.output}\n\n`;
-
             if (solResult.output !== bruteResult.output && !failFound) {
                 failFound = true;
                 panel.webview.postMessage({
@@ -357,17 +366,20 @@ async function runStressTests(workDir, exeExt, panel) {
                     caseIndex: i,
                     input: input,
                     expected: bruteResult.output,
-                    solution: solResult.output
+                    solution: solResult.output,
+                    time: elapsed
                 });
                 return;
             }
             if (!failFound) {
-                panel.webview.postMessage({ command: 'pass', caseIndex: i });
+                panel.webview.postMessage({ command: 'pass', caseIndex: i, time: elapsed });
             }
         }
     };
     const workers = Array.from({ length: Math.min(cpuCount, maxTests) }, () => worker());
     await Promise.all(workers);
+    const totalElapsed = ((Date.now() - startAll) / 1000).toFixed(2);
+    panel.webview.postMessage({ command: 'log', message: `Stress tests finished in ${totalElapsed}s.` });
 
     // Save stress test outputs for debugging
     const textIODir = path.join(workDir, 'textIO');

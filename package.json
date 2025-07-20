@@ -57,7 +57,7 @@
       "properties": {
         "leetcodeStressTester.testCount": {
           "type": "number",
-          "default": 100,
+          "default": 1000,
           "description": "Number of random tests to generate"
         },
         "leetcodeStressTester.timeLimitMs": {

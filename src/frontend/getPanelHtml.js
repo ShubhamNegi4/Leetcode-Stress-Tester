@@ -73,32 +73,25 @@ function getPanelHtml() {
             loaderWrapper.style.marginTop = '8px';
             status.parentNode.insertBefore(loaderWrapper, status.nextSibling);
         }
-        // Linear progress bar
-        let progressBar = document.getElementById('status-progress-bar');
-        if (!progressBar) {
-            progressBar = document.createElement('div');
-            progressBar.id = 'status-progress-bar';
-            progressBar.style.display = 'none';
-            progressBar.style.width = '100%';
-            progressBar.style.height = '8px';
-            progressBar.style.background = 'var(--vscode-editorWidget-background, #e5e7eb)';
-            progressBar.style.borderRadius = '4px';
-            progressBar.style.overflow = 'hidden';
-            progressBar.innerHTML = '<div id="status-progress-bar-inner" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#22d3ee);transition:width 0.2s;"></div>';
-            loaderWrapper.appendChild(progressBar);
+        // Number bar (replaces progress bar)
+        let numberBar = document.getElementById('status-number-bar');
+        if (!numberBar) {
+            numberBar = document.createElement('div');
+            numberBar.id = 'status-number-bar';
+            numberBar.style.display = 'none';
+            numberBar.style.textAlign = 'center';
+            numberBar.style.fontWeight = 'bold';
+            numberBar.style.fontSize = '13px';
+            numberBar.style.color = 'var(--vscode-editor-foreground)';
+            loaderWrapper.appendChild(numberBar);
         }
-        function showProgressBar(current, total) {
-            progressBar.style.display = 'block';
-            const inner = document.getElementById('status-progress-bar-inner');
-            if (inner) {
-                const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-                inner.style.width = percent + '%';
-            }
+        function showNumberBar(current, total) {
+            numberBar.style.display = 'block';
+            numberBar.textContent = \`Running test \${current}/\${total}...\`;
         }
-        function hideProgressBar() {
-            progressBar.style.display = 'none';
-            const inner = document.getElementById('status-progress-bar-inner');
-            if (inner) inner.style.width = '0%';
+        function hideNumberBar() {
+            numberBar.style.display = 'none';
+            numberBar.textContent = '';
         }
         const log = document.getElementById('log');
         if (log) log.remove();
@@ -107,7 +100,7 @@ function getPanelHtml() {
             status.textContent = message;
             status.className = 'status ' + type;
             status.style.display = 'block';
-            if (!showLoader) hideProgressBar();
+            if (!showLoader) hideNumberBar();
             if (type === 'error' && message !== 'Test case failed.') {
                 sampleContainer.innerHTML = '';
                 errorActive = true;
@@ -181,7 +174,7 @@ function getPanelHtml() {
             const message = event.data;
             switch (message.command) {
                 case 'progress':
-                    showProgressBar(message.i, message.total);
+                    showNumberBar(message.i, message.total);
                     break;
                 case 'status':
                     showStatus(message.text, message.type || 'info', false);
@@ -196,7 +189,7 @@ function getPanelHtml() {
                     }
                     break;
                 case 'done':
-                    hideProgressBar();
+                    hideNumberBar();
                     showStatus('All tests passed!', 'success', false);
                     break;
             }

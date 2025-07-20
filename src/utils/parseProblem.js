@@ -29,9 +29,13 @@ function extractSamples(htmlContent) {
             // Fallback: Split by lines, take pairs
             const lines = block.trim().split('\n').map(l => l.trim()).filter(Boolean);
             for (let i = 0; i + 1 < lines.length; i += 2) {
+                let inputLine = lines[i] + '\n';
+                let outputLine = lines[i + 1] + '\n';
+                // Remove 'Output:' or similar prefix from output line
+                outputLine = outputLine.replace(/^Output\s*[:：]?\s*/i, '');
                 samples.push({
-                    input: lines[i] + '\n',
-                    output: lines[i + 1] + '\n'
+                    input: inputLine,
+                    output: outputLine
                 });
             }
         }
