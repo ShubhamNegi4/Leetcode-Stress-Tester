@@ -8,6 +8,7 @@
     "url": "https://github.com/ShubhamNegi4/Leetcode-Stress-Tester"
   },
   "version": "0.1.1",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
