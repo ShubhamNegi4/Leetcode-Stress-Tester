@@ -32,19 +32,29 @@ function parseNumbers(str) {
 }
 
 function formatSampleInput(input) {
-    // Try to extract numbers and target from the sample input string
-    // e.g. 'nums = [2,7,11,15], target = 9' => '[2,7,11,15]\n9'
+    input = input.trim();
+    // Handle string inputs (e.g., s = "babad" or just "babad")
+    const stringMatch = input.match(/^[sS]\s*=\s*\"(.*)\"$/) || input.match(/^\"(.*)\"$/);
+    if (stringMatch) {
+        return JSON.stringify(stringMatch[1]);
+    }
+    // Existing logic for arrays + targets
     const arrMatch = input.match(/\[.*?\]/);
     const numArr = arrMatch ? arrMatch[0] : '[]';
     const targetMatch = input.match(/target\s*=\s*(-?\d+)/);
     const target = targetMatch ? targetMatch[1] : '0';
     // If the input is already in JSON-per-line, just return it
-    if (/^\s*\[.*\]\s*\n\s*-?\d+\s*$/.test(input.trim())) {
-        return input.trim();
+    if (/^\s*\[.*\]\s*\n\s*-?\d+\s*$/.test(input)) {
+        return input;
     }
-    // If we can't parse, log a warning and return the original
+    // If we can't parse as array/target, assume it's a single value and try to JSON-ify it
     if (!arrMatch || !targetMatch) {
-        return input.trim();
+        try {
+            JSON.parse(input);  // If it's already valid JSON, return it
+            return input;
+        } catch {
+            return JSON.stringify(input);  // Wrap as string JSON
+        }
     }
     return `${numArr}\n${target}`;
 }
@@ -256,7 +266,13 @@ async function runSampleTests(workDir, exeExt, panel) {
             }
             let solRaw = solResult.output;
             if (!solRaw) solRaw = "<<NO OUTPUT>>";
-            const ok = JSON.stringify(parseNumbers(solRaw)) === JSON.stringify(parseNumbers(expected));
+            // Robust output comparison: try JSON, else fallback to string
+            let ok;
+            try {
+                ok = JSON.stringify(JSON.parse(solRaw)) === JSON.stringify(JSON.parse(expected));
+            } catch {
+                ok = solRaw.trim() === expected.trim();
+            }
             if (!ok && !failFound) {
                 failFound = true;
                 panel.webview.postMessage({
@@ -441,21 +457,46 @@ async function handleFetchProblem(slug, panel) {
         // Save all sample test cases to textIO/input.txt, separated by blank lines
         const samples = extractSamples(q.content);
         function toLeetCodeJsonInput(sampleInput) {
-            // Try to extract numbers and target from the sample input string
-            // e.g. 'nums = [2,7,11,15], target = 9' => '[2,7,11,15]\n9'
-            const arrMatch = sampleInput.match(/\[.*?\]/);
-            const numArr = arrMatch ? arrMatch[0] : '[]';
-            const targetMatch = sampleInput.match(/target\s*=\s*(-?\d+)/);
-            const target = targetMatch ? targetMatch[1] : '0';
-            // If the input is already in JSON-per-line, just return it
-            if (/^\s*\[.*\]\s*\n\s*-?\d+\s*$/.test(sampleInput.trim())) {
-                return sampleInput.trim();
+            let input = sampleInput.trim();
+            input = input.replace(/^Input:\s*/, '');
+
+            // Robust split on commas not inside brackets or quotes
+            let parts = [];
+            let current = '';
+            let depth = 0;
+            let inString = false;
+            for (let i = 0; i < input.length; ++i) {
+                const c = input[i];
+                if (c === '"') inString = !inString;
+                if (!inString) {
+                    if (c === '[') depth++;
+                    if (c === ']') depth--;
+                    if (c === ',' && depth === 0) {
+                        parts.push(current);
+                        current = '';
+                        continue;
+                    }
+                }
+                current += c;
             }
-            // If we can't parse, log a warning and return the original
-            if (!arrMatch || !targetMatch) {
-                return sampleInput.trim();
+            if (current) parts.push(current);
+
+            // For each part, extract value after '=' if present, else use as-is
+            let values = parts.map(part => {
+                let eqIdx = part.indexOf('=');
+                if (eqIdx !== -1) {
+                    return part.slice(eqIdx + 1).trim();
+                }
+                return part.trim();
+            });
+
+            // If we found at least one value with '=', join them with newlines
+            if (parts.length > 1 || input.includes('=')) {
+                return values.join('\n');
             }
-            return `${numArr}\n${target}`;
+
+            // Otherwise, just return the input as-is (for direct values)
+            return input;
         }
         if (samples.length > 0) {
             const sampleContent = samples.map(s => `${toLeetCodeJsonInput(s.input)}\n---\n${s.output.trim()}`).join('\n\n');

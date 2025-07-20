@@ -5,7 +5,7 @@ using json = nlohmann::json;
 
 class Solution {
 public:
-    vector<int> twoSum(vector<int>& nums, int target) {
+    vector<int> twoSum(vector<int> &nums, int target) {
         for (int i = 0; i < nums.size(); i++) {
             for (int j = i + 1; j < nums.size(); j++) {
                 if (nums.at(j) == target - nums.at(i)) {
@@ -21,10 +21,8 @@ public:
 int main() {
     cin.tie(0)->sync_with_stdio(0);cin.exceptions(ios::badbit | ios::failbit);
     string line;
-    getline(cin, line);
-    vector<int> nums = json::parse(line);
-    getline(cin, line);
-    int target = json::parse(line);
+    getline(cin, line); vector<int> nums = json::parse(line);
+    getline(cin, line); int n = json::parse(line);
 
     Solution sol;
     auto result = sol.twoSum(nums, target);

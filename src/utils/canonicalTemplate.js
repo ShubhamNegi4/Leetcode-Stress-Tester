@@ -13,8 +13,10 @@ int main() {
     Solution sol;
     auto result = sol.FUNCTION_NAME(PARAMS);
 
-    // For int or string:
+    // For int:
     // cout << result << endl;
+    // For string:
+    // cout << std::quoted(result) << endl;
 
     // For vector<int>:
     cout << "[";

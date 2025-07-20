@@ -1,2 +1,11 @@
-node_modules/
-**/*.txt
+# Dependencies
+/node_modules
+
+# Compiled files & executables
+*.gch
+*.exe
+*.o
+*.vsix
+
+# Build or generated directories
+/stress tester/pch/
