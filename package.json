@@ -37,7 +37,7 @@
         {
           "id": "leetcode-stress-container",
           "title": "Stress Tester",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -47,7 +47,7 @@
           "type": "webview",
           "id": "leetcodeStressPanelView",
           "name": "Stress Tester Controls",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
