@@ -6,7 +6,7 @@
 [![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue.svg)](https://marketplace.visualstudio.com/VSCode)
 
 A Visual Studio Code extension for programmers to fetch LeetCode problems, set up local C++ testing environments, and stress-test your solutions with random and sample test cases—all from within your editor.
-
+  ![demovid.mp4](./media/demovid.mp4)
   ![sample.png](./media/sample.png)
   ![working.png](./media/working.png)
   ![error.png](./media/error.png)
